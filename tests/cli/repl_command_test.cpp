@@ -208,3 +208,93 @@ TEST_CASE("run_repl forwards the system prompt and user turn to the backend", "[
     REQUIRE(msgs[1].role == ChatMessage::Role::User);
     REQUIRE(msgs[1].content == "rename Foo to Bar");
 }
+
+TEST_CASE("run_repl carries conversation history across turns", "[repl]") {
+    FakeBackend backend;
+    backend.replies = {"first reply", "second reply"};
+
+    std::istringstream in("first turn\nsecond turn\n/quit\n");
+    std::ostringstream out;
+    ReplOptions opts;
+    opts.use_color = false;
+
+    REQUIRE(run_repl(in, out, backend, opts) == 0);
+    REQUIRE(backend.seen.size() == 2);
+
+    // Turn 1: system + user.
+    const auto& t1 = backend.seen[0];
+    REQUIRE(t1.size() == 2);
+    REQUIRE(t1[1].content == "first turn");
+
+    // Turn 2: system + user1 + assistant1 + user2.
+    const auto& t2 = backend.seen[1];
+    REQUIRE(t2.size() == 4);
+    REQUIRE(t2[0].role == ChatMessage::Role::System);
+    REQUIRE(t2[1].role == ChatMessage::Role::User);
+    REQUIRE(t2[1].content == "first turn");
+    REQUIRE(t2[2].role == ChatMessage::Role::Assistant);
+    REQUIRE(t2[2].content == "first reply");
+    REQUIRE(t2[3].role == ChatMessage::Role::User);
+    REQUIRE(t2[3].content == "second turn");
+}
+
+TEST_CASE("run_repl /clear drops the history but keeps the system prompt", "[repl]") {
+    FakeBackend backend;
+    backend.replies = {"first reply", "post-clear reply"};
+
+    std::istringstream in("first turn\n/clear\nfresh turn\n/quit\n");
+    std::ostringstream out;
+    ReplOptions opts;
+    opts.use_color = false;
+
+    REQUIRE(run_repl(in, out, backend, opts) == 0);
+    REQUIRE(backend.seen.size() == 2);
+
+    // After /clear the second turn should look just like a fresh turn 1.
+    const auto& t2 = backend.seen[1];
+    REQUIRE(t2.size() == 2);
+    REQUIRE(t2[0].role == ChatMessage::Role::System);
+    REQUIRE(t2[1].role == ChatMessage::Role::User);
+    REQUIRE(t2[1].content == "fresh turn");
+
+    REQUIRE(out.str().find("history cleared") != std::string::npos);
+}
+
+TEST_CASE("run_repl /history reports the turn count", "[repl]") {
+    FakeBackend backend;
+    backend.replies = {"r1", "r2"};
+
+    std::istringstream in("turn one\nturn two\n/history\n/quit\n");
+    std::ostringstream out;
+    ReplOptions opts;
+    opts.use_color = false;
+
+    REQUIRE(run_repl(in, out, backend, opts) == 0);
+    REQUIRE(out.str().find("history: 2 turns") != std::string::npos);
+}
+
+TEST_CASE("run_repl history_limit prunes the oldest turn pair", "[repl]") {
+    FakeBackend backend;
+    backend.replies = {"r1", "r2", "r3"};
+
+    std::istringstream in("turn one\nturn two\nturn three\n/quit\n");
+    std::ostringstream out;
+    ReplOptions opts;
+    opts.use_color = false;
+    opts.history_limit = 1;  // keep only the most recent user/assistant pair
+
+    REQUIRE(run_repl(in, out, backend, opts) == 0);
+    REQUIRE(backend.seen.size() == 3);
+
+    // Turn 3's view: system + (user2, assistant2) + user3 — the
+    // "turn one" pair was pruned after turn 2 closed.
+    const auto& t3 = backend.seen[2];
+    REQUIRE(t3.size() == 4);
+    REQUIRE(t3[0].role == ChatMessage::Role::System);
+    REQUIRE(t3[1].role == ChatMessage::Role::User);
+    REQUIRE(t3[1].content == "turn two");
+    REQUIRE(t3[2].role == ChatMessage::Role::Assistant);
+    REQUIRE(t3[2].content == "r2");
+    REQUIRE(t3[3].role == ChatMessage::Role::User);
+    REQUIRE(t3[3].content == "turn three");
+}
