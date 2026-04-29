@@ -69,10 +69,18 @@ ctest --preset release
 ```
 vectra/
 ├── architecture.md          Design document (start here)
+├── languages.toml           Language registry (data-driven, no C++ changes)
 ├── CMakeLists.txt           Top-level build
 ├── CMakePresets.json        Cross-platform build presets
 ├── vcpkg.json               Manifest dependencies
-├── third_party/             llama.cpp, tree-sitter, grammars (submodules)
+├── cmake/                   Reusable CMake helpers (e.g. TreeSitterGrammar)
+├── queries/<lang>/          Tree-sitter queries: chunks, symbols, imports
+├── adapters/                Build-tool manifests: cargo, cmake, npm, ...
+├── third_party/             Pinned submodules
+│   ├── llama.cpp/           Inference runtime (embeddings + generation)
+│   ├── tree-sitter/         Parser runtime
+│   ├── usearch/             HNSW vector index (header-only)
+│   └── grammars/            Per-language tree-sitter grammars
 ├── src/
 │   ├── core/                Tree-sitter chunking, Merkle index
 │   ├── store/               SQLite + usearch persistence
@@ -83,6 +91,22 @@ vectra/
 ├── include/vectra/          Public headers
 ├── tests/                   Catch2 unit tests
 └── benchmarks/              google/benchmark perf tests
+```
+
+### Cloning with submodules
+
+Vectra vendors `llama.cpp`, `tree-sitter`, `usearch`, and seven
+tree-sitter grammars as git submodules under `third_party/`. Always
+clone with submodules:
+
+```bash
+git clone --recurse-submodules https://github.com/HenryBuilds/Vectra.git
+```
+
+If you cloned without `--recurse-submodules`, run:
+
+```bash
+git submodule update --init --recursive
 ```
 
 ## Roadmap

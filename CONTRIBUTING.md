@@ -118,6 +118,63 @@ submodule, open an issue and explain:
 - The license (must be permissive — Apache-2.0, MIT, BSD).
 - Maintenance status.
 
+## Adding a language
+
+Vectra resolves languages purely from data: the language registry
+(`languages.toml`), per-language tree-sitter queries (`queries/<lang>/`),
+and a pinned grammar submodule under `third_party/grammars/`. Adding a
+language touches **no C++ code**.
+
+The workflow is:
+
+1. **Vet the grammar.** Only grammars under
+   [`github.com/tree-sitter`](https://github.com/tree-sitter) are
+   accepted by default. Community grammars need a separate PR with a
+   maintainer's justification — supply chain matters.
+2. **Add the submodule:**
+   ```bash
+   git submodule add https://github.com/tree-sitter/tree-sitter-<lang>.git \
+       third_party/grammars/tree-sitter-<lang>
+   ```
+3. **Write the queries.** Create `queries/<lang>/chunks.scm`,
+   `symbols.scm`, and `imports.scm`. Crib from
+   [helix](https://github.com/helix-editor/helix/tree/master/runtime/queries)
+   or [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter/tree/master/queries)
+   — both are MIT/Apache and battle-tested. Attribute in the file
+   header.
+4. **Register in `languages.toml`.** Add a `[[language]]` block with
+   the canonical name, file extensions, grammar directory, entry
+   symbol, and query paths.
+5. **Test.** Once `vectra-core` lands, `vectra index` on a sample
+   project will exercise the new language end-to-end.
+
+## Adding a build adapter
+
+Build adapters live in `adapters/<tool>.toml`. Each declares which
+files mark a project root, which commands to run for build/test, and
+how to parse the resulting diagnostics. Adding a new tool means
+dropping a TOML file in `adapters/` — again, no C++ changes.
+
+Required fields: `name`, `detect_files`, `priority`, `build_command`,
+`test_command`, `error_format`. See `adapters/cargo.toml` as the
+reference example.
+
+## Updating a submodule
+
+When a grammar or core dependency upstream lands a fix you want:
+
+```bash
+cd third_party/grammars/tree-sitter-rust
+git fetch
+git checkout <new-tag-or-sha>
+cd ../../..
+git add third_party/grammars/tree-sitter-rust
+git commit -m "deps: bump tree-sitter-rust to <ref>"
+```
+
+One submodule per PR. Reviewers check the upstream diff between the
+old and new ref before approving.
+
 ## Reporting bugs
 
 Open an issue with:
