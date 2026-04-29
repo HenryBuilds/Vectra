@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <span>
 #include <string>
@@ -51,6 +52,19 @@ struct GenerateOptions {
     // Optional stop sequences. The backend appends them to whatever
     // model-specific stop tokens the backend already uses.
     std::vector<std::string> stop;
+
+    // Optional streaming token callback. When set, the backend
+    // requests an SSE / chunked response from the underlying API
+    // and invokes the callback for each text delta as it arrives.
+    // The full concatenated text is still returned by generate();
+    // the callback is purely for incremental UI feedback (think
+    // "let the user see the model typing").
+    //
+    // Threading: the callback is invoked synchronously from the
+    // HTTP receive thread. Keep it cheap (printf, ring-buffer
+    // append, ...) and never throw — exceptions across the
+    // callback boundary corrupt the request lifecycle.
+    std::function<void(std::string_view delta)> on_token;
 };
 
 // Abstract interface over a chat-style LLM. Concrete backends live

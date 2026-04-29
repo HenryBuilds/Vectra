@@ -8,6 +8,7 @@
 add_library(vectra_agent STATIC
     anthropic_backend.cpp
     llm_backend.cpp
+    sse_parser.cpp
 )
 add_library(vectra::agent ALIAS vectra_agent)
 
