@@ -175,6 +175,16 @@ add_tree_sitter_grammar(
     NAME tsx
     PATH ${CMAKE_SOURCE_DIR}/third_party/grammars/tree-sitter-typescript/tsx)
 
+# usearch is header-only. Expose its include directory as an INTERFACE
+# library so any consumer can link vectra::usearch and pick up the
+# headers without compiling anything. The C wrapper under
+# third_party/usearch/c is intentionally not used — the C++ index
+# template gives us better control over storage and metrics.
+add_library(vectra_usearch INTERFACE)
+add_library(vectra::usearch ALIAS vectra_usearch)
+target_include_directories(vectra_usearch INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/third_party/usearch/include>)
+
 # ---------------------------------------------------------------------------
 # Subdirectories (added incrementally as modules land)
 # ---------------------------------------------------------------------------
