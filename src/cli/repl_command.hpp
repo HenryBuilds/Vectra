@@ -53,4 +53,17 @@ struct ReplOptions {
                            agent::LlmBackend& backend,
                            const ReplOptions& opts);
 
+// Production CLI entry-point for `vectra repl`. Discovers the
+// project root, loads .vectra/config.toml (or defaults), opens the
+// backend, and drives run_repl against std::cin / std::cout.
+struct ReplCommandOptions {
+    std::filesystem::path repo_root;
+    std::filesystem::path config_path;
+    int history_limit = 0;
+    bool no_color = false;  // user override; final decision pairs with TTY
+    std::string system_prompt;
+};
+
+[[nodiscard]] int run_repl_command(const ReplCommandOptions& opts);
+
 }  // namespace vectra::cli

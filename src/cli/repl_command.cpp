@@ -6,17 +6,21 @@
 
 #include <cstddef>
 #include <exception>
+#include <iostream>
 #include <istream>
+#include <memory>
 #include <ostream>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "vectra/agent/llm_backend.hpp"
 #include "vectra/exec/apply.hpp"
 #include "vectra/exec/diff.hpp"
 
 #include "approval.hpp"
+#include "cli_paths.hpp"
 #include "diff_render.hpp"
 
 namespace vectra::cli {
@@ -219,6 +223,71 @@ int run_repl(std::istream& in,
         }
         prune_history(history, opts.history_limit);
     }
+}
+
+int run_repl_command(const ReplCommandOptions& cli) {
+    namespace fs = std::filesystem;
+
+    // ---- repo root ---------------------------------------------------
+    fs::path repo_root = cli.repo_root;
+    if (repo_root.empty()) {
+        if (auto found = find_project_root(fs::current_path()); found) {
+            repo_root = std::move(*found);
+        } else {
+            fmt::print(stderr,
+                       "error: no project root detected (looked for .vectra or .git).\n"
+                       "       run from inside a project, or pass --root <path>.\n");
+            return 1;
+        }
+    } else {
+        std::error_code ec;
+        if (!fs::is_directory(repo_root, ec)) {
+            fmt::print(stderr, "error: --root is not a directory: {}\n", repo_root.string());
+            return 1;
+        }
+    }
+
+    // ---- config ------------------------------------------------------
+    const auto config_path = resolve_config_path(repo_root, cli.config_path);
+    agent::AgentConfig cfg;
+    try {
+        std::error_code ec;
+        if (fs::exists(config_path, ec)) {
+            cfg = agent::AgentConfig::from_toml(config_path);
+        } else if (!cli.config_path.empty()) {
+            // Explicit --config that points nowhere — bail loudly.
+            fmt::print(stderr, "error: --config not found: {}\n", config_path.string());
+            return 1;
+        } else {
+            cfg = agent::AgentConfig::with_defaults();
+        }
+    } catch (const std::exception& e) {
+        fmt::print(stderr, "error: invalid config {}: {}\n", config_path.string(), e.what());
+        return 1;
+    }
+
+    // ---- backend -----------------------------------------------------
+    std::unique_ptr<agent::LlmBackend> backend;
+    try {
+        backend = agent::open_backend(cfg);
+    } catch (const std::exception& e) {
+        fmt::print(stderr, "error: {}\n", e.what());
+        return 1;
+    }
+
+    // ---- color -------------------------------------------------------
+    const bool use_color = !cli.no_color && stdout_is_tty();
+
+    fmt::print("project: {}\n", repo_root.string());
+    fmt::print("model:   {} ({})\n", cfg.model, cfg.backend);
+
+    ReplOptions ro;
+    ro.repo_root = repo_root;
+    ro.use_color = use_color;
+    ro.history_limit = cli.history_limit;
+    ro.system_prompt = cli.system_prompt;
+
+    return run_repl(std::cin, std::cout, *backend, ro);
 }
 
 }  // namespace vectra::cli

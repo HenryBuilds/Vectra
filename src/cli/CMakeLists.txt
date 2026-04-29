@@ -2,7 +2,9 @@
 
 add_executable(vectra
     approval.cpp
+    cli_paths.cpp
     diff_render.cpp
+    fix_command.cpp
     index_command.cpp
     main.cpp
     repl_command.cpp
