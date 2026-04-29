@@ -49,7 +49,14 @@ enum class ChunkKind : uint8_t {
 // One indexed chunk. Owns its `text` rather than referring back into
 // the source buffer because the source buffer typically goes out of
 // scope before the chunk is embedded or persisted.
+//
+// `file_path` is populated when a Chunk is read back from a Store
+// (the store records the file association at put time and reattaches
+// it on read). The Chunker leaves the field empty because it works
+// on raw source strings without seeing paths; the indexing CLI is
+// responsible for telling the store what file each chunk came from.
 struct Chunk {
+    std::string file_path;
     std::string language;  // canonical language name from languages.toml
     ChunkKind kind = ChunkKind::Unknown;
     std::string symbol;  // extracted name if available; empty otherwise

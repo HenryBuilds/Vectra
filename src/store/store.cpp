@@ -339,8 +339,7 @@ std::optional<core::Chunk> Store::get_chunk(std::string_view hash) const {
 
     core::Chunk c;
     c.content_hash = core::Blake3Hash::from_hex(detail::column_text(s, 0));
-    // file_path column 1 is currently re-purposed (see put_chunks);
-    // we do not surface it on Chunk yet.
+    c.file_path = detail::column_text(s, 1);
     c.language = detail::column_text(s, 2);
     c.kind = static_cast<core::ChunkKind>(detail::column_int(s, 3));
     c.symbol = detail::column_text(s, 4);
@@ -366,6 +365,7 @@ std::vector<core::Chunk> Store::chunks_for_file(std::string_view file_path) cons
 
         core::Chunk c;
         c.content_hash = core::Blake3Hash::from_hex(detail::column_text(s, 0));
+        c.file_path = detail::column_text(s, 1);
         c.language = detail::column_text(s, 2);
         c.kind = static_cast<core::ChunkKind>(detail::column_int(s, 3));
         c.symbol = detail::column_text(s, 4);
