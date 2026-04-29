@@ -11,6 +11,7 @@
 add_library(vectra_exec STATIC
     apply.cpp
     diff.cpp
+    test_runner.cpp
 )
 add_library(vectra::exec ALIAS vectra_exec)
 
@@ -27,6 +28,7 @@ target_link_libraries(vectra_exec
     PRIVATE
         fmt::fmt
         spdlog::spdlog
+        tomlplusplus::tomlplusplus
 )
 
 set_target_properties(vectra_exec PROPERTIES
