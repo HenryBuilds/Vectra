@@ -46,7 +46,7 @@ void ensure_backend_initialized() {
                                                 std::string_view text,
                                                 bool add_special) {
     const int32_t initial = static_cast<int32_t>(text.size()) + 32;
-    std::vector<llama_token> tokens(initial);
+    std::vector<llama_token> tokens(static_cast<std::size_t>(initial));
     int32_t n = llama_tokenize(vocab,
                                text.data(),
                                static_cast<int32_t>(text.size()),

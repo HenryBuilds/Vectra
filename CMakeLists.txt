@@ -183,9 +183,17 @@ add_tree_sitter_grammar(
 # headers without compiling anything. The C wrapper under
 # third_party/usearch/c is intentionally not used — the C++ index
 # template gives us better control over storage and metrics.
+#
+# Mark the include directory as SYSTEM so the compiler treats those
+# headers as out-of-tree: warnings raised inside usearch's templates
+# (it is heavy on old-style casts and signed/unsigned mixing) do not
+# fail our strict -Werror policy. Per-include #pragma blocks were not
+# enough because GCC has no -Weverything kill switch and would still
+# see -Wshadow / -Wold-style-cast / -Wdouble-promotion from our top-
+# level flag list.
 add_library(vectra_usearch INTERFACE)
 add_library(vectra::usearch ALIAS vectra_usearch)
-target_include_directories(vectra_usearch INTERFACE
+target_include_directories(vectra_usearch SYSTEM INTERFACE
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/third_party/usearch/include>)
 
 # llama.cpp — built from source. Heavy first build (~10-15 min);
