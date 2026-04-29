@@ -97,8 +97,10 @@ int main(int argc, char** argv) {
     fix_cmd->add_option("--root", fix_opts.repo_root, "Project root (default: walk up from CWD)")
         ->check(CLI::ExistingDirectory);
     fix_cmd->add_option("--db", fix_opts.db, "Index DB (default: <root>/.vectra/index.db)");
-    fix_cmd->add_option("-k,--top-k", fix_opts.k, "Number of context chunks to surface")
-        ->default_val(8);
+    fix_cmd->add_option(
+        "-k,--top-k",
+        fix_opts.k,
+        "Number of context chunks to surface (default: 8, override in .vectra/config.toml)");
     fix_cmd->add_option(
         "--model", fix_opts.model, "Embedding model name (skip for symbol-only retrieval)");
     fix_cmd->add_option("--reranker",

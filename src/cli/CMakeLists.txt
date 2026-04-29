@@ -6,6 +6,7 @@ add_executable(vectra
     fix_command.cpp
     index_command.cpp
     main.cpp
+    project_config.cpp
     search_command.cpp
     walker.cpp
 )
@@ -24,6 +25,7 @@ target_link_libraries(vectra
         CLI11::CLI11
         fmt::fmt
         spdlog::spdlog
+        tomlplusplus::tomlplusplus
 )
 
 # Make the project version available as a compile-time string so

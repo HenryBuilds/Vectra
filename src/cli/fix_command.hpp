@@ -38,9 +38,10 @@ struct FixOptions {
     // Override for the index DB. Defaults to <root>/.vectra/index.db.
     std::filesystem::path db;
 
-    // Number of context chunks to surface. The same chunks `vectra
-    // search -k <K>` would print.
-    std::size_t k = 8;
+    // Number of context chunks to surface. 0 means "fall back to
+    // .vectra/config.toml's [retrieve].top_k, then to a built-in
+    // default of 8". The CLI flag, when passed, overrides both.
+    std::size_t k = 0;
 
     // Embedding-model registry name. Empty -> symbol-only retrieval.
     std::string model;

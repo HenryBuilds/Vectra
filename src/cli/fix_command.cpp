@@ -23,6 +23,7 @@
 
 #include "claude_subprocess.hpp"
 #include "cli_paths.hpp"
+#include "project_config.hpp"
 
 namespace vectra::cli {
 
@@ -81,8 +82,36 @@ int run_fix(const FixOptions& opts) {
         }
     }
 
+    // ---- project defaults -------------------------------------------
+    // .vectra/config.toml supplies fallbacks for any flag the user
+    // did not pass. CLI flags always win.
+    ProjectConfig project_cfg;
+    try {
+        project_cfg = load_project_config(repo_root);
+    } catch (const std::exception& e) {
+        fmt::print(stderr, "error: {}\n", e.what());
+        return 1;
+    }
+
+    FixOptions resolved = opts;
+    if (resolved.model.empty()) {
+        resolved.model = project_cfg.model;
+    }
+    if (resolved.reranker.empty()) {
+        resolved.reranker = project_cfg.reranker;
+    }
+    if (resolved.k == 0) {
+        resolved.k = project_cfg.top_k != 0 ? project_cfg.top_k : std::size_t{8};
+    }
+    if (resolved.claude_binary.empty()) {
+        resolved.claude_binary = project_cfg.claude_binary;
+    }
+    if (resolved.claude_extra_args.empty()) {
+        resolved.claude_extra_args = project_cfg.claude_extra_args;
+    }
+
     // ---- index -------------------------------------------------------
-    const auto db_path = resolve_db(repo_root, opts.db);
+    const auto db_path = resolve_db(repo_root, resolved.db);
     {
         std::error_code ec;
         if (!fs::exists(db_path, ec)) {
@@ -102,16 +131,18 @@ int run_fix(const FixOptions& opts) {
 
 #if VECTRA_HAS_EMBED
     std::unique_ptr<embed::Embedder> embedder;
-    if (!opts.model.empty()) {
-        const auto* entry = embed::ModelRegistry::by_name(opts.model);
+    if (!resolved.model.empty()) {
+        const auto* entry = embed::ModelRegistry::by_name(resolved.model);
         if (entry == nullptr) {
-            fmt::print(stderr, "error: unknown model '{}'. Try `vectra model list`.\n", opts.model);
+            fmt::print(
+                stderr, "error: unknown model '{}'. Try `vectra model list`.\n", resolved.model);
             return 2;
         }
         const auto model_path = embed::ModelRegistry::local_path(*entry);
         if (!fs::exists(model_path)) {
-            fmt::print(
-                stderr, "error: model not cached. Run `vectra model pull {}` first.\n", opts.model);
+            fmt::print(stderr,
+                       "error: model not cached. Run `vectra model pull {}` first.\n",
+                       resolved.model);
             return 2;
         }
         embed::EmbedderConfig cfg;
@@ -125,18 +156,19 @@ int run_fix(const FixOptions& opts) {
     }
 
     std::unique_ptr<embed::Reranker> reranker;
-    if (!opts.reranker.empty()) {
-        const auto* entry = embed::ModelRegistry::by_name(opts.reranker);
+    if (!resolved.reranker.empty()) {
+        const auto* entry = embed::ModelRegistry::by_name(resolved.reranker);
         if (entry == nullptr) {
-            fmt::print(
-                stderr, "error: unknown reranker '{}'. Try `vectra model list`.\n", opts.reranker);
+            fmt::print(stderr,
+                       "error: unknown reranker '{}'. Try `vectra model list`.\n",
+                       resolved.reranker);
             return 2;
         }
         const auto model_path = embed::ModelRegistry::local_path(*entry);
         if (!fs::exists(model_path)) {
             fmt::print(stderr,
                        "error: reranker not cached. Run `vectra model pull {}` first.\n",
-                       opts.reranker);
+                       resolved.reranker);
             return 2;
         }
         embed::RerankerConfig cfg;
@@ -147,7 +179,7 @@ int run_fix(const FixOptions& opts) {
         fmt::print(stderr, "reranker:{}\n", entry->name);
     }
 #else
-    if (!opts.model.empty() || !opts.reranker.empty()) {
+    if (!resolved.model.empty() || !resolved.reranker.empty()) {
         fmt::print(stderr,
                    "error: this build was produced with VECTRA_BUILD_EMBED=OFF; "
                    "the --model and --reranker flags are unavailable.\n");
@@ -158,11 +190,11 @@ int run_fix(const FixOptions& opts) {
 
     // ---- retrieve ----------------------------------------------------
     retrieve::RetrieveOptions r_opts;
-    r_opts.k = opts.k;
-    const auto hits = retriever.retrieve(opts.task, r_opts);
+    r_opts.k = resolved.k;
+    const auto hits = retriever.retrieve(resolved.task, r_opts);
 
     PromptComposition comp;
-    comp.task = opts.task;
+    comp.task = resolved.task;
     comp.context.reserve(hits.size());
     for (const auto& h : hits) {
         comp.context.push_back(to_chunk(h));
@@ -175,7 +207,7 @@ int run_fix(const FixOptions& opts) {
 
     const auto prompt = compose_prompt(comp);
 
-    if (opts.print_prompt) {
+    if (resolved.print_prompt) {
         std::cout << prompt;
         return 0;
     }
@@ -188,10 +220,10 @@ int run_fix(const FixOptions& opts) {
 
     ClaudeInvocation inv;
     inv.prompt_file = tmp.path();
-    if (!opts.claude_binary.empty()) {
-        inv.claude_binary = opts.claude_binary;
+    if (!resolved.claude_binary.empty()) {
+        inv.claude_binary = resolved.claude_binary;
     }
-    inv.extra_args = opts.claude_extra_args;
+    inv.extra_args = resolved.claude_extra_args;
 
     const int rc = run_claude(inv, std::cout);
     if (rc < 0) {
