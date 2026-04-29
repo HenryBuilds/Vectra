@@ -16,6 +16,7 @@
 #include "vectra/core/language.hpp"
 #include "vectra/store/store.hpp"
 
+#include "cli_paths.hpp"
 #include "walker.hpp"
 
 namespace vectra::cli {
@@ -44,6 +45,28 @@ namespace fs = std::filesystem;
     return {};
 }
 
+// Look in the install-side share/vectra directory next to the
+// running binary. Covers both `<prefix>/bin/vectra` +
+// `<prefix>/share/vectra/` (Unix-style) and `<exe>/share/vectra/`
+// (zip-distribution-style).
+[[nodiscard]] fs::path search_install_for_resources() {
+    const auto exe = current_exe_path();
+    if (exe.empty()) {
+        return {};
+    }
+    const auto exe_dir = exe.parent_path();
+    for (const auto& candidate : {
+             exe_dir / ".." / "share" / "vectra",
+             exe_dir / "share" / "vectra",
+         }) {
+        std::error_code ec;
+        if (fs::exists(candidate / "languages.toml", ec)) {
+            return fs::weakly_canonical(candidate, ec);
+        }
+    }
+    return {};
+}
+
 [[nodiscard]] fs::path resolve_resources(const fs::path& explicit_path) {
     if (!explicit_path.empty()) {
         return explicit_path;
@@ -52,6 +75,9 @@ namespace fs = std::filesystem;
         return env;
     }
     if (auto found = search_upward_for_resources(fs::current_path()); !found.empty()) {
+        return found;
+    }
+    if (auto found = search_install_for_resources(); !found.empty()) {
         return found;
     }
     throw std::runtime_error(

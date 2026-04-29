@@ -63,6 +63,16 @@ include(GNUInstallDirs)
 install(TARGETS vectra
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+# `vectra index` chunks via tree-sitter and needs both languages.toml
+# and the per-language queries/*.scm files at run time. Ship them
+# under the standard share/<project>/ layout. resolve_resources()
+# probes the exe-relative fallback so the installed binary picks
+# them up without needing --resources or VECTRA_RESOURCES.
+install(FILES ${CMAKE_SOURCE_DIR}/languages.toml
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/vectra)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/queries/
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/vectra/queries)
+
 if(WIN32)
     # On Windows the vcpkg-installed dependencies (sqlite3, fmt,
     # spdlog, blake3, llama.cpp, openssl via crypt32, ...) are
