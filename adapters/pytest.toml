@@ -1,0 +1,26 @@
+# pytest adapter — Python projects with a test runner.
+#
+# pytest has no compile step; build_command is a no-op. The error_pattern
+# captures the canonical "E   <message>" lines that pytest emits in its
+# short traceback format.
+
+name              = "pytest"
+description       = "Python projects tested with pytest."
+
+# Multiple plausible markers — any single match is enough.
+detect_files      = ["pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini"]
+
+priority          = 50
+
+languages         = ["python"]
+
+# No build phase for Python.
+build_command     = []
+test_command      = ["pytest", "-q", "--tb=short", "--no-header"]
+
+error_format      = "regex"
+
+# Captures the message of an assertion or runtime failure as reported
+# by pytest's short traceback. Multi-line failures are stitched in the
+# C++ parser; this regex extracts a single line at a time.
+error_pattern     = "^E\\s+(?P<message>.+)$"

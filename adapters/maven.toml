@@ -1,0 +1,20 @@
+# Maven adapter — Java / Kotlin projects on the Apache Maven toolchain.
+
+name          = "maven"
+description   = "Java / Kotlin projects built with Apache Maven."
+
+detect_files  = ["pom.xml"]
+
+priority      = 50
+
+# Java and Kotlin are not yet in languages.toml; the adapter still
+# applies via detect_files. The languages list is a soft preference,
+# not a gate.
+languages     = ["java", "kotlin"]
+
+build_command = ["mvn", "compile", "--quiet"]
+test_command  = ["mvn", "test", "--quiet"]
+
+# javac diagnostics share enough structure with gcc's that the
+# compiler parser handles them with its java sub-mode.
+error_format  = "compiler"

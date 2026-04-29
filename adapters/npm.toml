@@ -1,0 +1,25 @@
+# npm adapter — JavaScript / TypeScript projects.
+#
+# package.json is the universal marker; the actual build/test runner
+# (tsc, vite, jest, vitest, ...) is whatever the project's scripts
+# point at. We invoke the standard script names and let error_format
+# = "auto" sniff the output.
+
+name              = "npm"
+description       = "JavaScript / TypeScript projects with package.json."
+
+# Lockfiles are intentionally NOT in detect_files: we want the adapter
+# to apply even before dependencies are installed.
+detect_files      = ["package.json"]
+
+priority          = 60
+
+languages         = ["javascript", "typescript", "tsx"]
+
+build_command     = ["npm", "run", "build", "--if-present"]
+test_command      = ["npm", "test", "--", "--passWithNoTests"]
+
+# "auto" sniffs known patterns from tsc, eslint, jest, vitest, mocha.
+# Falls back to a generic "file:line:col: message" parser if nothing
+# matches.
+error_format      = "auto"

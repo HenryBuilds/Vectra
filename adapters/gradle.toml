@@ -1,0 +1,19 @@
+# Gradle adapter — Java / Kotlin / Android projects built with Gradle.
+
+name          = "gradle"
+description   = "Java / Kotlin / Android projects built with Gradle."
+
+# A project rooted on a Gradle wrapper is far more common than a system
+# gradle install; vectra-exec prefers ./gradlew when present and falls
+# back to "gradle" on PATH otherwise. The wrapper preference is
+# implemented in the runner, not the manifest.
+detect_files  = ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"]
+
+priority      = 50
+
+languages     = ["java", "kotlin"]
+
+build_command = ["gradle", "build", "--quiet"]
+test_command  = ["gradle", "test", "--quiet"]
+
+error_format  = "compiler"

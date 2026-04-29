@@ -1,0 +1,18 @@
+# Go adapter — Go modules.
+#
+# go build and go test emit a stable, well-known diagnostic format
+# ("path/to/file.go:line:col: message") that our compiler parser handles.
+
+name          = "go"
+description   = "Go modules."
+
+detect_files  = ["go.mod"]
+
+priority      = 70
+
+languages     = ["go"]
+
+build_command = ["go", "build", "./..."]
+test_command  = ["go", "test", "./..."]
+
+error_format  = "compiler"

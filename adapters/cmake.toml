@@ -1,0 +1,22 @@
+# CMake adapter — C and C++ projects.
+#
+# CMake itself does not emit diagnostics; the underlying compiler does.
+# We declare error_format = "compiler" so the parser dispatches by
+# detected toolchain (gcc/clang/msvc) at runtime.
+
+name              = "cmake"
+description       = "CMake-driven C/C++ projects."
+
+detect_files      = ["CMakeLists.txt"]
+
+priority          = 70
+
+languages         = ["c", "cpp"]
+
+# CMake builds are two-phase. {build_dir} defaults to project_root/build
+# unless the user has configured otherwise via vectra config.
+configure_command = ["cmake", "-S", "{src_dir}", "-B", "{build_dir}"]
+build_command     = ["cmake", "--build", "{build_dir}"]
+test_command      = ["ctest", "--test-dir", "{build_dir}", "--output-on-failure"]
+
+error_format      = "compiler"

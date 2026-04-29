@@ -1,0 +1,35 @@
+# Cargo adapter — Rust projects.
+#
+# Cargo emits structured JSON diagnostics via --message-format=json,
+# which our error parser reads directly without regex heuristics. This
+# is the highest-fidelity adapter we have today.
+
+name          = "cargo"
+description   = "Rust projects managed by Cargo."
+
+# Any directory containing one of these files is considered a Cargo
+# project root. The match is exact filename, not glob.
+detect_files  = ["Cargo.toml"]
+
+# When multiple adapters match (e.g. a Rust crate inside a CMake parent),
+# higher priority wins. Range is informally 0–100; tool-native managers
+# rank above generic build drivers.
+priority      = 80
+
+# Languages this adapter typically builds. Used as a soft hint to prefer
+# this adapter when the failing chunk is in one of these languages.
+languages     = ["rust"]
+
+# Commands. Tokens in {curly_braces} are substituted at run time:
+#   {project_root}  absolute path to the directory holding detect_files
+#   {build_dir}     project_root/target by default for cargo
+#   {src_dir}       same as project_root for cargo
+build_command = ["cargo", "build", "--message-format=json"]
+test_command  = ["cargo", "test", "--no-fail-fast"]
+
+# Error format: "json" | "compiler" | "regex" | "auto"
+#   json     — adapter emits structured records the parser maps directly
+#   compiler — adapter prints gcc/clang/msvc-style diagnostics
+#   regex    — fall back to user-supplied error_pattern
+#   auto     — best-effort sniffing (last resort)
+error_format  = "json"
