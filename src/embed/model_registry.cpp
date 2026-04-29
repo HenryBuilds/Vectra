@@ -25,7 +25,7 @@ namespace {
 // they are filled in after each file is downloaded and verified
 // against the upstream announcement. The downloader logs a warning
 // when no hash is provided.
-const std::array<ModelEntry, 3> kBuiltInModels{{
+const std::array<ModelEntry, 4> kBuiltInModels{{
     {
         "qwen3-embed-0.6b",
         "Qwen3-Embedding 0.6B (Q8_0) — 1024-dim, fits on CPU",
@@ -52,6 +52,19 @@ const std::array<ModelEntry, 3> kBuiltInModels{{
         /*sha256=*/"",
         /*size_bytes=*/0,
         /*dim=*/4096,
+    },
+    {
+        // Cross-encoder reranker. Consumed by Retriever after RRF
+        // fusion to score the small candidate pool jointly with the
+        // query. dim is N/A for a reranker (output is a scalar per
+        // pair); 0 records that explicitly.
+        "qwen3-rerank-0.6b",
+        "Qwen3-Reranker 0.6B (Q8_0) — cross-encoder for retrieval rerank",
+        "Qwen/Qwen3-Reranker-0.6B-GGUF",
+        "Qwen3-Reranker-0.6B-Q8_0.gguf",
+        /*sha256=*/"",
+        /*size_bytes=*/0,
+        /*dim=*/0,
     },
 }};
 
