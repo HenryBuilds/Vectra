@@ -131,3 +131,54 @@ TEST_CASE("chunk_path skips unknown extensions silently", "[chunker]") {
 
     REQUIRE(chunker.chunk_path("anything", "unknownextension").empty());
 }
+
+TEST_CASE("chunker pulls names out of the C++ declarator chain", "[chunker]") {
+    constexpr std::string_view kCppSource = R"CPP(
+        namespace foo {
+
+        int free_function(int x) {
+            return x + 1;
+        }
+
+        class Bar {
+        public:
+            void inline_method() {}
+            int another();
+        };
+
+        int Bar::another() {
+            return 42;
+        }
+
+        }  // namespace foo
+    )CPP";
+
+    auto registry = load_repo_registry();
+    Chunker chunker(registry);
+
+    const auto* cpp = registry.by_name("cpp");
+    REQUIRE(cpp != nullptr);
+
+    const auto chunks = chunker.chunk(kCppSource, *cpp);
+    REQUIRE_FALSE(chunks.empty());
+
+    // Free function — name lives behind function_definition.declarator.declarator.
+    const bool has_free = std::any_of(chunks.begin(), chunks.end(), [](const auto& c) {
+        return c.kind == ChunkKind::Function && c.symbol == "free_function";
+    });
+    REQUIRE(has_free);
+
+    // Inline member function — same shape, name lands in field_identifier.
+    const bool has_inline_method = std::any_of(chunks.begin(), chunks.end(), [](const auto& c) {
+        return c.kind == ChunkKind::Method && c.symbol == "inline_method";
+    });
+    REQUIRE(has_inline_method);
+
+    // Out-of-line member definition — declarator chain ends at
+    // qualified_identifier "Bar::another"; we surface the qualified
+    // form verbatim because that is the searchable thing.
+    const bool has_qualified = std::any_of(chunks.begin(), chunks.end(), [](const auto& c) {
+        return c.kind == ChunkKind::Method && c.symbol == "Bar::another";
+    });
+    REQUIRE(has_qualified);
+}

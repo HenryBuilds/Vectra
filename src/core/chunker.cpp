@@ -95,20 +95,100 @@ namespace {
     return ChunkKind::Other;
 }
 
-// Try to extract a name field from the chunk's root node. Tree-sitter
-// exposes a `name` field on most "named" definitions; we try it first
-// and fall back to walking children for grammars that don't surface it.
-[[nodiscard]] std::string extract_symbol_name(TSNode node, std::string_view source) {
-    TSNode name = ts_node_child_by_field_name(node, "name", 4);
-    if (ts_node_is_null(name)) {
+// Slice the source text covered by `node`. Empty when the node spans
+// nothing useful or its range falls outside the source buffer.
+[[nodiscard]] std::string node_text(TSNode node, std::string_view source) {
+    if (ts_node_is_null(node)) {
         return {};
     }
-    const uint32_t start = ts_node_start_byte(name);
-    const uint32_t end = ts_node_end_byte(name);
+    const uint32_t start = ts_node_start_byte(node);
+    const uint32_t end = ts_node_end_byte(node);
     if (end <= start || end > source.size()) {
         return {};
     }
     return std::string(source.substr(start, end - start));
+}
+
+// Recognise the leaf node types that carry an identifier we want to
+// surface as a symbol name.
+[[nodiscard]] bool is_identifier_leaf(std::string_view node_type) noexcept {
+    return node_type == "identifier" ||            //
+           node_type == "field_identifier" ||      //
+           node_type == "type_identifier" ||       //
+           node_type == "qualified_identifier" ||  //
+           node_type == "namespace_identifier" ||  //
+           node_type == "property_identifier";     //
+}
+
+// True if `node` lives directly inside a class / struct / union body
+// in tree-sitter-cpp. Used to distinguish C++ member functions from
+// free functions, both of which are AST-typed `function_definition`
+// in tree-sitter-cpp.
+[[nodiscard]] bool is_inside_class_body(TSNode node) noexcept {
+    TSNode parent = ts_node_parent(node);
+    for (int depth = 0; depth < 8 && !ts_node_is_null(parent); ++depth) {
+        const std::string_view t{ts_node_type(parent)};
+        if (t == "class_specifier" || t == "struct_specifier" || t == "union_specifier") {
+            return true;
+        }
+        if (t == "translation_unit" || t == "namespace_definition") {
+            // We've crossed out of any enclosing class without finding one.
+            return false;
+        }
+        parent = ts_node_parent(parent);
+    }
+    return false;
+}
+
+// Refine a coarse ChunkKind once we have the extracted symbol and AST
+// node in hand. Currently this only patches up tree-sitter-cpp's
+// uniform `function_definition` so member functions surface as Method
+// rather than Function — same node type, different semantics.
+[[nodiscard]] ChunkKind refine_kind(ChunkKind kind,
+                                    std::string_view node_type,
+                                    std::string_view symbol,
+                                    TSNode node) noexcept {
+    if (kind != ChunkKind::Function) {
+        return kind;
+    }
+    if (node_type != "function_definition") {
+        return kind;  // tree-sitter-cpp is the only grammar that needs this
+    }
+    if (symbol.find("::") != std::string_view::npos) {
+        return ChunkKind::Method;  // Foo::bar() out-of-line definition
+    }
+    if (is_inside_class_body(node)) {
+        return ChunkKind::Method;  // inline member function
+    }
+    return kind;
+}
+
+// Extract a name from the chunk's root node.
+//
+// Tree-sitter exposes a `name` field on most "named" definitions
+// (Python's def, Rust's fn, JS's function_declaration, ...) — we use
+// that when present. Some grammars, notably tree-sitter-cpp, nest the
+// name several declarators deep and don't surface a top-level `name`
+// field. For those we fall back to walking the `declarator` chain
+// until we hit an identifier-shaped leaf, which covers free
+// functions, member functions, and qualified Foo::bar definitions.
+[[nodiscard]] std::string extract_symbol_name(TSNode node, std::string_view source) {
+    if (TSNode name = ts_node_child_by_field_name(node, "name", 4); !ts_node_is_null(name)) {
+        return node_text(name, source);
+    }
+
+    // Walk through nested declarators (function_definition.declarator
+    // → function_declarator.declarator → identifier-ish leaf). The
+    // depth bound is a safety net against cycles in malformed trees.
+    TSNode cursor = ts_node_child_by_field_name(node, "declarator", 10);
+    for (int depth = 0; depth < 8 && !ts_node_is_null(cursor); ++depth) {
+        const std::string_view t{ts_node_type(cursor)};
+        if (is_identifier_leaf(t)) {
+            return node_text(cursor, source);
+        }
+        cursor = ts_node_child_by_field_name(cursor, "declarator", 10);
+    }
+    return {};
 }
 
 }  // namespace
@@ -177,8 +257,8 @@ std::vector<Chunk> Chunker::chunk(std::string_view source, const Language& lang)
 
             Chunk c;
             c.language = lang.name;
-            c.kind = kind_from_node_type(node_type);
             c.symbol = extract_symbol_name(node, source);
+            c.kind = refine_kind(kind_from_node_type(node_type), node_type, c.symbol, node);
             c.range = Range{
                 start_byte,
                 end_byte,
