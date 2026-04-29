@@ -14,3 +14,6 @@ add_compile_definitions(
 add_subdirectory(core)
 add_subdirectory(store)
 add_subdirectory(cli)
+# if(VECTRA_BUILD_EMBED)
+#     add_subdirectory(embed)
+# endif()

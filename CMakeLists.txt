@@ -36,6 +36,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 # ---------------------------------------------------------------------------
 option(VECTRA_BUILD_TESTS         "Build unit tests"                 ON)
 option(VECTRA_BUILD_BENCHMARKS    "Build benchmarks"                 OFF)
+option(VECTRA_BUILD_EMBED         "Build the embedding module (compiles llama.cpp; slow first build)" ON)
 option(VECTRA_ENABLE_ASAN         "Enable AddressSanitizer"          OFF)
 option(VECTRA_ENABLE_TSAN         "Enable ThreadSanitizer"           OFF)
 option(VECTRA_ENABLE_UBSAN        "Enable UndefinedBehaviorSanitizer" OFF)
@@ -186,12 +187,72 @@ add_library(vectra::usearch ALIAS vectra_usearch)
 target_include_directories(vectra_usearch INTERFACE
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/third_party/usearch/include>)
 
+# llama.cpp — built from source. Heavy first build (~10-15 min);
+# incremental builds are fast. Gated behind VECTRA_BUILD_EMBED so
+# anyone who only wants to work on core / store / cli can skip it.
+# We map our user-facing VECTRA_GPU_* options onto ggml's GGML_*
+# toggles before adding the subdirectory; ggml reads its options
+# at configure time.
+if(VECTRA_BUILD_EMBED)
+    set(LLAMA_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+    set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(LLAMA_BUILD_SERVER   OFF CACHE BOOL "" FORCE)
+    set(LLAMA_BUILD_TOOLS    OFF CACHE BOOL "" FORCE)
+    set(LLAMA_BUILD_COMMON   OFF CACHE BOOL "" FORCE)
+
+    if(VECTRA_GPU_CUDA)
+        set(GGML_CUDA   ON CACHE BOOL "" FORCE)
+    endif()
+    if(VECTRA_GPU_METAL)
+        set(GGML_METAL  ON CACHE BOOL "" FORCE)
+    endif()
+    if(VECTRA_GPU_VULKAN)
+        set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+    endif()
+    if(VECTRA_GPU_HIP)
+        set(GGML_HIPBLAS ON CACHE BOOL "" FORCE)
+    endif()
+
+    add_subdirectory(third_party/llama.cpp EXCLUDE_FROM_ALL)
+
+    # llama.cpp uses u8"..." literals expecting them to be char[]
+    # (C++17 behaviour). In C++20 those literals are char8_t[] and
+    # do not implicitly convert to char*, breaking llama-chat.cpp on
+    # MSVC's strict C++20 implementation. /Zc:char8_t- restores the
+    # C++17 typing — applied per-target so Vectra's own code stays
+    # standards-conformant. Setting CMAKE_CXX_FLAGS at the parent
+    # scope did not work because llama.cpp's own CMakeLists clears
+    # certain flag categories on its targets.
+    if(MSVC)
+        foreach(_llama_target IN ITEMS
+            llama
+            ggml
+            ggml-base
+            ggml-cpu
+            ggml-blas
+            ggml-cuda
+            ggml-hip
+            ggml-metal
+            ggml-vulkan
+            ggml-rpc
+            ggml-sycl
+            ggml-kompute
+            mtmd)
+            if(TARGET ${_llama_target})
+                target_compile_options(${_llama_target} PRIVATE /Zc:char8_t-)
+            endif()
+        endforeach()
+    endif()
+endif()
+
 # ---------------------------------------------------------------------------
 # Subdirectories (added incrementally as modules land)
 # ---------------------------------------------------------------------------
 add_subdirectory(src/core)
 add_subdirectory(src/store)
-# add_subdirectory(src/embed)
+# if(VECTRA_BUILD_EMBED)
+#     add_subdirectory(src/embed)
+# endif()
 # add_subdirectory(src/retrieve)
 # add_subdirectory(src/exec)
 add_subdirectory(src/cli)
@@ -212,5 +273,6 @@ message(STATUS "  C++ standard : ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Compiler     : ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "  Tests        : ${VECTRA_BUILD_TESTS}")
 message(STATUS "  Benchmarks   : ${VECTRA_BUILD_BENCHMARKS}")
+message(STATUS "  Embed        : ${VECTRA_BUILD_EMBED}")
 message(STATUS "  Sanitizers   : ASAN=${VECTRA_ENABLE_ASAN} TSAN=${VECTRA_ENABLE_TSAN} UBSAN=${VECTRA_ENABLE_UBSAN}")
 message(STATUS "")
