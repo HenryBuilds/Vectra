@@ -189,7 +189,7 @@ target_include_directories(vectra_usearch INTERFACE
 # Subdirectories (added incrementally as modules land)
 # ---------------------------------------------------------------------------
 add_subdirectory(src/core)
-# add_subdirectory(src/store)
+add_subdirectory(src/store)
 # add_subdirectory(src/embed)
 # add_subdirectory(src/retrieve)
 # add_subdirectory(src/exec)
