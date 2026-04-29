@@ -36,6 +36,12 @@ struct ReplOptions {
     // Optional system-prompt override. Empty means "use the built-in
     // coding-agent prompt".
     std::string system_prompt;
+
+    // Maximum number of user/assistant turn pairs to keep in the
+    // conversation history. The system prompt is always retained.
+    // 0 means "unbounded" — fine for short sessions, but long ones
+    // will eventually overflow the model's context window.
+    int history_limit = 0;
 };
 
 // Run the REPL against caller-supplied streams and a caller-owned

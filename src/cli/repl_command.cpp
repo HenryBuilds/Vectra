@@ -4,13 +4,14 @@
 
 #include <fmt/format.h>
 
-#include <array>
+#include <cstddef>
 #include <exception>
 #include <istream>
 #include <ostream>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "vectra/exec/apply.hpp"
 #include "vectra/exec/diff.hpp"
@@ -55,9 +56,26 @@ constexpr std::string_view kPrompt = "vectra> ";
 
 void print_help(std::ostream& out) {
     out << "Commands:\n"
-           "  /help           Show this message.\n"
-           "  /quit, /exit    Leave the REPL.\n"
-           "  Anything else   Send to the model as a turn.\n";
+           "  /help            Show this message.\n"
+           "  /history         Show how many turns are in the conversation.\n"
+           "  /clear, /reset   Drop the conversation history.\n"
+           "  /quit, /exit     Leave the REPL.\n"
+           "  Anything else    Send to the model as a turn.\n";
+}
+
+// Cap the conversation at `limit` user/assistant pairs by dropping
+// the oldest pairs. The system prompt at index 0 is retained. A
+// limit of 0 means "no cap".
+void prune_history(std::vector<agent::ChatMessage>& history, int limit) {
+    if (limit <= 0) {
+        return;
+    }
+    const auto max_size = static_cast<std::size_t>(1 + 2 * limit);
+    if (history.size() <= max_size) {
+        return;
+    }
+    const auto excess = history.size() - max_size;
+    history.erase(history.begin() + 1, history.begin() + 1 + static_cast<std::ptrdiff_t>(excess));
 }
 
 [[nodiscard]] std::string build_streaming_reply(agent::LlmBackend& backend,
@@ -73,27 +91,31 @@ void print_help(std::ostream& out) {
     return reply;
 }
 
-// One turn: send `user_input` to the model, stream the reply, and
-// optionally apply a proposed patch. Returns false when the user
+// One turn: append the user's input to `history`, stream the model
+// reply (also recorded in history), and optionally apply a proposed
+// patch. Rejected and applied patches both leave the conversation
+// transcript intact so the model can refer back to its previous
+// proposal on the user's follow-up. Returns false when the user
 // asked to leave the REPL during the approval prompt.
 [[nodiscard]] bool run_turn(std::istream& in,
                             std::ostream& out,
                             agent::LlmBackend& backend,
                             const ReplOptions& opts,
-                            std::string_view system_prompt,
+                            std::vector<agent::ChatMessage>& history,
                             std::string_view user_input) {
-    const std::array<agent::ChatMessage, 2> messages{
-        agent::ChatMessage{agent::ChatMessage::Role::System, std::string{system_prompt}},
-        agent::ChatMessage{agent::ChatMessage::Role::User, std::string{user_input}},
-    };
+    history.push_back({agent::ChatMessage::Role::User, std::string{user_input}});
 
     std::string reply;
     try {
-        reply = build_streaming_reply(backend, messages, out);
+        reply = build_streaming_reply(backend, history, out);
     } catch (const std::exception& e) {
         out << fmt::format("\nerror: model request failed: {}\n", e.what());
+        // Remove the user message we just appended — the model never
+        // saw it through, so the next turn shouldn't either.
+        history.pop_back();
         return true;
     }
+    history.push_back({agent::ChatMessage::Role::Assistant, reply});
 
     exec::Patch patch;
     try {
@@ -145,6 +167,9 @@ int run_repl(std::istream& in,
     const std::string_view system_prompt =
         opts.system_prompt.empty() ? kDefaultSystemPrompt : std::string_view{opts.system_prompt};
 
+    std::vector<agent::ChatMessage> history;
+    history.push_back({agent::ChatMessage::Role::System, std::string{system_prompt}});
+
     out << fmt::format("vectra REPL — backend: {}. Type /help for commands, /quit to exit.\n",
                        backend.name());
 
@@ -168,13 +193,31 @@ int run_repl(std::istream& in,
                 print_help(out);
                 continue;
             }
+            if (trimmed == "/clear" || trimmed == "/reset") {
+                const auto dropped = history.size() - 1;
+                history.resize(1);  // keep only the system prompt
+                out << fmt::format(
+                    "history cleared ({} message{} dropped).\n", dropped, dropped == 1 ? "" : "s");
+                continue;
+            }
+            if (trimmed == "/history") {
+                const auto messages = history.size() - 1;  // exclude system
+                const auto turns = messages / 2;
+                out << fmt::format("history: {} turn{}, {} message{}.\n",
+                                   turns,
+                                   turns == 1 ? "" : "s",
+                                   messages,
+                                   messages == 1 ? "" : "s");
+                continue;
+            }
             out << fmt::format("unknown command: {} (try /help)\n", trimmed);
             continue;
         }
 
-        if (!run_turn(in, out, backend, opts, system_prompt, trimmed)) {
+        if (!run_turn(in, out, backend, opts, history, trimmed)) {
             return 0;
         }
+        prune_history(history, opts.history_limit);
     }
 }
 
