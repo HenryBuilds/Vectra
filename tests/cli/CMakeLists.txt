@@ -1,6 +1,7 @@
 # Unit tests for vectra CLI components.
 
 add_executable(vectra_cli_tests
+    claude_subprocess_test.cpp
     cli_paths_test.cpp
     walker_test.cpp
 )
@@ -18,6 +19,7 @@ target_include_directories(vectra_cli_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/cli)
 
 target_sources(vectra_cli_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/cli/claude_subprocess.cpp
     ${CMAKE_SOURCE_DIR}/src/cli/cli_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/cli/walker.cpp)
 
