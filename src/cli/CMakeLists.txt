@@ -27,6 +27,21 @@ target_compile_definitions(vectra PRIVATE
     VECTRA_VERSION="${PROJECT_VERSION}"
 )
 
+# When the embed module is built, the CLI gains the `vectra model`
+# subcommand family. The model_command.cpp directly uses the internal
+# model_downloader.hpp from src/embed, so we add that directory to
+# the include path for this target only.
+if(VECTRA_BUILD_EMBED)
+    target_sources(vectra PRIVATE
+        model_command.cpp)
+    target_include_directories(vectra PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/embed)
+    target_link_libraries(vectra PRIVATE
+        vectra::embed)
+    target_compile_definitions(vectra PRIVATE
+        VECTRA_HAS_EMBED=1)
+endif()
+
 set_target_properties(vectra PROPERTIES
     FOLDER  "vectra"
     OUTPUT_NAME "vectra")

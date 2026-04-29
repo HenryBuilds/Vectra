@@ -15,6 +15,10 @@
 
 #include "index_command.hpp"
 
+#if VECTRA_HAS_EMBED
+#include "model_command.hpp"
+#endif
+
 namespace {
 
 // VECTRA_VERSION is injected by the top-level CMakeLists.txt so the
@@ -52,6 +56,48 @@ int main(int argc, char** argv) {
             exit_code = 1;
         }
     });
+
+#if VECTRA_HAS_EMBED
+    // ---- model -----------------------------------------------------------
+    auto* model_cmd = app.add_subcommand("model", "Manage embedding models");
+    model_cmd->require_subcommand(1);
+
+    auto* model_list = model_cmd->add_subcommand("list", "List built-in embedding models");
+    model_list->callback([&] {
+        try {
+            exit_code = vectra::cli::run_model_list();
+        } catch (const std::exception& e) {
+            fmt::print(stderr, "error: {}\n", e.what());
+            exit_code = 1;
+        }
+    });
+
+    vectra::cli::ModelWhereOptions where_opts;
+    auto* model_where = model_cmd->add_subcommand("where", "Print the local cache path of a model");
+    model_where->add_option("name", where_opts.name, "Registry name")->required();
+    model_where->callback([&] {
+        try {
+            exit_code = vectra::cli::run_model_where(where_opts);
+        } catch (const std::exception& e) {
+            fmt::print(stderr, "error: {}\n", e.what());
+            exit_code = 1;
+        }
+    });
+
+    vectra::cli::ModelPullOptions pull_opts;
+    auto* model_pull = model_cmd->add_subcommand("pull", "Download a model into the local cache");
+    model_pull->add_option("name", pull_opts.name, "Registry name")->required();
+    model_pull->add_flag(
+        "--force", pull_opts.force, "Re-download even if the model is already cached");
+    model_pull->callback([&] {
+        try {
+            exit_code = vectra::cli::run_model_pull(pull_opts);
+        } catch (const std::exception& e) {
+            fmt::print(stderr, "error: {}\n", e.what());
+            exit_code = 1;
+        }
+    });
+#endif
 
     CLI11_PARSE(app, argc, argv);
     return exit_code;
