@@ -2,6 +2,7 @@
 
 add_executable(vectra_cli_tests
     approval_test.cpp
+    cli_paths_test.cpp
     diff_render_test.cpp
     repl_command_test.cpp
     walker_test.cpp
@@ -23,6 +24,7 @@ target_include_directories(vectra_cli_tests PRIVATE
 
 target_sources(vectra_cli_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/cli/approval.cpp
+    ${CMAKE_SOURCE_DIR}/src/cli/cli_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/cli/diff_render.cpp
     ${CMAKE_SOURCE_DIR}/src/cli/repl_command.cpp
     ${CMAKE_SOURCE_DIR}/src/cli/walker.cpp)
