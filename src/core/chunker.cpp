@@ -113,8 +113,11 @@ namespace {
 
 }  // namespace
 
-Chunker::Chunker(const LanguageRegistry& registry, ParserPool& pool)
-    : registry_(registry), pool_(pool) {}
+Chunker::Chunker(const LanguageRegistry& registry)
+    : registry_(registry), pool_(std::make_unique<ParserPool>(registry)) {}
+
+Chunker::~Chunker() = default;
+Chunker::Chunker(Chunker&&) noexcept = default;
 
 std::vector<Chunk> Chunker::chunk(std::string_view source, const Language& lang) const {
     if (source.empty()) {
@@ -122,7 +125,7 @@ std::vector<Chunk> Chunker::chunk(std::string_view source, const Language& lang)
     }
 
     // Acquire a parser and run it.
-    ParserLease lease = pool_.acquire(lang.name);
+    ParserLease lease = pool_->acquire(lang.name);
 
     TSTree* tree = ts_parser_parse_string(
         lease.get(), nullptr, source.data(), static_cast<uint32_t>(source.size()));

@@ -7,12 +7,9 @@
 #include <filesystem>
 #include <string>
 
-#include "parser_pool.hpp"  // resolved via the test target's include path
-
 using vectra::core::Chunker;
 using vectra::core::ChunkKind;
 using vectra::core::LanguageRegistry;
-using vectra::core::ParserPool;
 
 namespace {
 
@@ -55,8 +52,7 @@ impl Greeter {
 
 TEST_CASE("chunker emits at least the function and class for a Python source", "[chunker]") {
     auto registry = load_repo_registry();
-    ParserPool pool(registry);
-    Chunker chunker(registry, pool);
+    Chunker chunker(registry);
 
     const auto* python = registry.by_name("python");
     REQUIRE(python != nullptr);
@@ -84,8 +80,7 @@ TEST_CASE("chunker emits at least the function and class for a Python source", "
 
 TEST_CASE("chunker assigns a non-zero content hash to each chunk", "[chunker]") {
     auto registry = load_repo_registry();
-    ParserPool pool(registry);
-    Chunker chunker(registry, pool);
+    Chunker chunker(registry);
 
     const auto* python = registry.by_name("python");
     const auto chunks = chunker.chunk(kPythonSource, *python);
@@ -102,8 +97,7 @@ TEST_CASE("chunker assigns a non-zero content hash to each chunk", "[chunker]") 
 
 TEST_CASE("chunker handles Rust impl blocks and structs", "[chunker]") {
     auto registry = load_repo_registry();
-    ParserPool pool(registry);
-    Chunker chunker(registry, pool);
+    Chunker chunker(registry);
 
     const auto* rust = registry.by_name("rust");
     REQUIRE(rust != nullptr);
@@ -124,8 +118,7 @@ TEST_CASE("chunker handles Rust impl blocks and structs", "[chunker]") {
 
 TEST_CASE("chunker returns empty for empty source", "[chunker]") {
     auto registry = load_repo_registry();
-    ParserPool pool(registry);
-    Chunker chunker(registry, pool);
+    Chunker chunker(registry);
 
     const auto* python = registry.by_name("python");
     const auto chunks = chunker.chunk("", *python);
@@ -134,8 +127,7 @@ TEST_CASE("chunker returns empty for empty source", "[chunker]") {
 
 TEST_CASE("chunk_path skips unknown extensions silently", "[chunker]") {
     auto registry = load_repo_registry();
-    ParserPool pool(registry);
-    Chunker chunker(registry, pool);
+    Chunker chunker(registry);
 
     REQUIRE(chunker.chunk_path("anything", "unknownextension").empty());
 }

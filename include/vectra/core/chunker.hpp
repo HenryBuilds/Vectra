@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -19,11 +20,22 @@
 
 namespace vectra::core {
 
-class ParserPool;
+class ParserPool;  // internal; defined in src/core/parser_pool.hpp
 
 class Chunker {
 public:
-    Chunker(const LanguageRegistry& registry, ParserPool& pool);
+    // Construct a Chunker that owns its own thread-safe parser pool.
+    // The registry must outlive the Chunker.
+    explicit Chunker(const LanguageRegistry& registry);
+
+    ~Chunker();
+    Chunker(const Chunker&) = delete;
+    Chunker& operator=(const Chunker&) = delete;
+    // Move-only: move-assignment is omitted because the class holds a
+    // reference to LanguageRegistry, which cannot be rebound. Callers
+    // that want to swap chunkers should construct fresh ones.
+    Chunker(Chunker&&) noexcept;
+    Chunker& operator=(Chunker&&) = delete;
 
     // Parse `source` against `lang`'s grammar and return the chunks
     // that the chunks.scm query matches. Throws std::runtime_error
@@ -40,7 +52,7 @@ public:
 
 private:
     const LanguageRegistry& registry_;
-    ParserPool& pool_;
+    std::unique_ptr<ParserPool> pool_;
 };
 
 }  // namespace vectra::core
