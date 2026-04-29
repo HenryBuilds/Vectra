@@ -14,6 +14,7 @@
 #include <iostream>
 
 #include "index_command.hpp"
+#include "search_command.hpp"
 
 #if VECTRA_HAS_EMBED
 #include "model_command.hpp"
@@ -51,6 +52,28 @@ int main(int argc, char** argv) {
     index_cmd->callback([&] {
         try {
             exit_code = vectra::cli::run_index(index_opts);
+        } catch (const std::exception& e) {
+            fmt::print(stderr, "error: {}\n", e.what());
+            exit_code = 1;
+        }
+    });
+
+    // ---- search ----------------------------------------------------------
+    auto* search_cmd = app.add_subcommand("search", "Hybrid search across the local index");
+
+    vectra::cli::SearchOptions search_opts;
+    search_cmd->add_option("query", search_opts.query, "Search query")->required();
+    search_cmd->add_option(
+        "--db", search_opts.db, "Database file (default: walks up to find .vectra/index.db)");
+    search_cmd->add_option("-k,--top-k", search_opts.k, "Number of hits to return")
+        ->default_val(10);
+    search_cmd->add_option(
+        "--model", search_opts.model, "Embedding model name (skip for symbol-only retrieval)");
+    search_cmd->add_flag(
+        "--show-text", search_opts.show_text, "Print full chunk text under each hit");
+    search_cmd->callback([&] {
+        try {
+            exit_code = vectra::cli::run_search(search_opts);
         } catch (const std::exception& e) {
             fmt::print(stderr, "error: {}\n", e.what());
             exit_code = 1;

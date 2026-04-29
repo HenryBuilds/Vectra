@@ -3,6 +3,7 @@
 add_executable(vectra
     index_command.cpp
     main.cpp
+    search_command.cpp
     walker.cpp
 )
 
@@ -14,6 +15,7 @@ target_link_libraries(vectra
     PRIVATE
         vectra::core
         vectra::store
+        vectra::retrieve
         vectra::compile_options
         vectra::sanitizers
         CLI11::CLI11
