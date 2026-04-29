@@ -15,6 +15,7 @@
     "spdlog",
     "abseil",
     "blake3",
+    "cli11",
     "tomlplusplus",
     {
       "name": "catch2",
