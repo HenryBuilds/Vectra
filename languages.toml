@@ -1,0 +1,100 @@
+# Vectra language registry.
+#
+# Each [[language]] entry describes one supported language. Vectra reads this
+# file at startup and registers languages dynamically. Adding a new language
+# means adding a tree-sitter grammar submodule under third_party/grammars/,
+# a query directory under queries/<name>/, and a new entry here. No C++
+# code changes required.
+#
+# Fields:
+#   name        Canonical lowercase identifier. Used in the symbol index
+#               and in CLI output. Must be unique across the file.
+#   extensions  File extensions (without leading dot) that map to this
+#               language. The first language matching an extension wins,
+#               so order matters when grammars overlap (e.g. .h is C
+#               unless overridden).
+#   grammar_dir Path to the tree-sitter grammar directory containing
+#               src/parser.c (and optionally src/scanner.c / src/scanner.cc).
+#               Resolved relative to the repository root.
+#   symbol      Name of the C entry function exported by the grammar.
+#               Always tree_sitter_<name> for the official grammars; we
+#               record it explicitly so contributors don't have to read
+#               the parser.c to know what to call.
+#   chunks      Path to the chunk-extraction query (relative to repo root).
+#   symbols     Path to the symbol-extraction query.
+#   imports     Path to the import-extraction query.
+
+[[language]]
+name        = "c"
+extensions  = ["c", "h"]
+grammar_dir = "third_party/grammars/tree-sitter-c"
+symbol      = "tree_sitter_c"
+chunks      = "queries/c/chunks.scm"
+symbols     = "queries/c/symbols.scm"
+imports     = "queries/c/imports.scm"
+
+[[language]]
+name        = "cpp"
+extensions  = ["cpp", "cc", "cxx", "c++", "hpp", "hh", "hxx", "h++"]
+grammar_dir = "third_party/grammars/tree-sitter-cpp"
+symbol      = "tree_sitter_cpp"
+chunks      = "queries/cpp/chunks.scm"
+symbols     = "queries/cpp/symbols.scm"
+imports     = "queries/cpp/imports.scm"
+
+[[language]]
+name        = "python"
+extensions  = ["py", "pyi", "pyw"]
+grammar_dir = "third_party/grammars/tree-sitter-python"
+symbol      = "tree_sitter_python"
+chunks      = "queries/python/chunks.scm"
+symbols     = "queries/python/symbols.scm"
+imports     = "queries/python/imports.scm"
+
+[[language]]
+name        = "javascript"
+extensions  = ["js", "mjs", "cjs", "jsx"]
+grammar_dir = "third_party/grammars/tree-sitter-javascript"
+symbol      = "tree_sitter_javascript"
+chunks      = "queries/javascript/chunks.scm"
+symbols     = "queries/javascript/symbols.scm"
+imports     = "queries/javascript/imports.scm"
+
+# The tree-sitter-typescript repository contains two variant grammars
+# (typescript and tsx) that share a scanner. We register them as two
+# separate languages so file extensions resolve unambiguously.
+[[language]]
+name        = "typescript"
+extensions  = ["ts", "mts", "cts"]
+grammar_dir = "third_party/grammars/tree-sitter-typescript/typescript"
+symbol      = "tree_sitter_typescript"
+chunks      = "queries/typescript/chunks.scm"
+symbols     = "queries/typescript/symbols.scm"
+imports     = "queries/typescript/imports.scm"
+
+[[language]]
+name        = "tsx"
+extensions  = ["tsx"]
+grammar_dir = "third_party/grammars/tree-sitter-typescript/tsx"
+symbol      = "tree_sitter_tsx"
+chunks      = "queries/typescript/chunks.scm"
+symbols     = "queries/typescript/symbols.scm"
+imports     = "queries/typescript/imports.scm"
+
+[[language]]
+name        = "rust"
+extensions  = ["rs"]
+grammar_dir = "third_party/grammars/tree-sitter-rust"
+symbol      = "tree_sitter_rust"
+chunks      = "queries/rust/chunks.scm"
+symbols     = "queries/rust/symbols.scm"
+imports     = "queries/rust/imports.scm"
+
+[[language]]
+name        = "go"
+extensions  = ["go"]
+grammar_dir = "third_party/grammars/tree-sitter-go"
+symbol      = "tree_sitter_go"
+chunks      = "queries/go/chunks.scm"
+symbols     = "queries/go/symbols.scm"
+imports     = "queries/go/imports.scm"
