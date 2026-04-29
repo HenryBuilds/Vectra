@@ -10,10 +10,13 @@
 #include <fmt/format.h>
 
 #include <CLI/CLI.hpp>
+#include <cstring>
 #include <exception>
 #include <iostream>
+#include <string_view>
+#include <vector>
 
-#include "fix_command.hpp"
+#include "ask_command.hpp"
 #include "index_command.hpp"
 #include "search_command.hpp"
 
@@ -32,6 +35,36 @@ namespace {
 }  // namespace
 
 int main(int argc, char** argv) {
+    // Bare-task shortcut. `vectra "<task>"` (or `vectra fix the bug`)
+    // is rewritten to `vectra ask <task>` so users do not have to
+    // type the verb for the common case. The rewrite happens before
+    // CLI11 parses anything, so all of `ask`'s flags still work via
+    // the canonical form. Anything that looks like a subcommand
+    // (`index`, `search`, `ask`, `model`, `--help`, `-h`,
+    // `--version`, `-V`) is left alone.
+    static constexpr std::string_view kSubcommands[] = {"index", "search", "ask", "model"};
+    std::vector<char*> rewritten_argv;
+    if (argc >= 2 && argv[1] != nullptr && argv[1][0] != '\0' && argv[1][0] != '-') {
+        const std::string_view first{argv[1]};
+        bool is_known = false;
+        for (const auto& s : kSubcommands) {
+            if (first == s) {
+                is_known = true;
+                break;
+            }
+        }
+        if (!is_known) {
+            rewritten_argv.reserve(static_cast<std::size_t>(argc) + 1);
+            rewritten_argv.push_back(argv[0]);
+            rewritten_argv.push_back(const_cast<char*>("ask"));
+            for (int i = 1; i < argc; ++i) {
+                rewritten_argv.push_back(argv[i]);
+            }
+            argc = static_cast<int>(rewritten_argv.size());
+            argv = rewritten_argv.data();
+        }
+    }
+
     CLI::App app{"Vectra — local-first code RAG and coding assistant", "vectra"};
     app.set_version_flag("-V,--version", VECTRA_VERSION);
     app.require_subcommand(1);
@@ -84,40 +117,45 @@ int main(int argc, char** argv) {
         }
     });
 
-    // ---- fix -------------------------------------------------------------
+    // ---- ask -------------------------------------------------------------
     // RAG dispatch to Claude Code: retrieve top-K chunks for the task,
     // compose a prompt that wraps them as <context> blocks, and shell
     // out to `claude -p`. Vectra does not edit files itself — Claude
-    // Code's tools own that.
-    auto* fix_cmd = app.add_subcommand("fix", "Hand a task to Claude Code with retrieved context");
+    // Code's tools own that. Bare `vectra "<task>"` (no subcommand)
+    // is rewritten to `vectra ask <task>` in the argv preprocessor
+    // below, so the verb is optional in the common case.
+    auto* ask_cmd = app.add_subcommand("ask", "Hand a task to Claude Code with retrieved context");
 
-    vectra::cli::FixOptions fix_opts;
-    fix_cmd->add_option("task", fix_opts.task, "Task description (quote it if it has spaces)")
-        ->required();
-    fix_cmd->add_option("--root", fix_opts.repo_root, "Project root (default: walk up from CWD)")
+    vectra::cli::AskOptions ask_opts;
+    ask_cmd
+        ->add_option(
+            "task", ask_opts.task_words, "Task description (multiple words are joined with spaces)")
+        ->required()
+        ->expected(1, -1);
+    ask_cmd->add_option("--root", ask_opts.repo_root, "Project root (default: walk up from CWD)")
         ->check(CLI::ExistingDirectory);
-    fix_cmd->add_option("--db", fix_opts.db, "Index DB (default: <root>/.vectra/index.db)");
-    fix_cmd->add_option(
+    ask_cmd->add_option("--db", ask_opts.db, "Index DB (default: <root>/.vectra/index.db)");
+    ask_cmd->add_option(
         "-k,--top-k",
-        fix_opts.k,
+        ask_opts.k,
         "Number of context chunks to surface (default: 8, override in .vectra/config.toml)");
-    fix_cmd->add_option(
-        "--model", fix_opts.model, "Embedding model name (skip for symbol-only retrieval)");
-    fix_cmd->add_option("--reranker",
-                        fix_opts.reranker,
+    ask_cmd->add_option(
+        "--model", ask_opts.model, "Embedding model name (skip for symbol-only retrieval)");
+    ask_cmd->add_option("--reranker",
+                        ask_opts.reranker,
                         "Cross-encoder reranker model name (e.g. qwen3-rerank-0.6b)");
-    fix_cmd->add_option("--claude-bin",
-                        fix_opts.claude_binary,
+    ask_cmd->add_option("--claude-bin",
+                        ask_opts.claude_binary,
                         "Override the claude binary (default: PATH lookup)");
-    fix_cmd->add_option("--claude-arg",
-                        fix_opts.claude_extra_args,
+    ask_cmd->add_option("--claude-arg",
+                        ask_opts.claude_extra_args,
                         "Extra flag passed through to `claude -p` (repeatable)");
-    fix_cmd->add_flag("--print-prompt",
-                      fix_opts.print_prompt,
+    ask_cmd->add_flag("--print-prompt",
+                      ask_opts.print_prompt,
                       "Print the composed prompt and exit (no claude spawn)");
-    fix_cmd->callback([&] {
+    ask_cmd->callback([&] {
         try {
-            exit_code = vectra::cli::run_fix(fix_opts);
+            exit_code = vectra::cli::run_ask(ask_opts);
         } catch (const std::exception& e) {
             fmt::print(stderr, "error: {}\n", e.what());
             exit_code = 1;

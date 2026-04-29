@@ -1,6 +1,12 @@
 // Copyright 2026 Vectra Contributors. Apache-2.0.
 //
-// `vectra fix "<task>"` — RAG-driven dispatch to Claude Code.
+// `vectra ask "<task>"` — RAG-driven dispatch to Claude Code.
+//
+// `ask` is the catch-all verb for "talk to the agent": bug fixes,
+// explanations, refactors, new features, code review questions,
+// anything you would type into Claude Code yourself. Bare-word
+// `vectra "<task>"` (no subcommand) is rewritten to `vectra ask`
+// before parsing so the verb is optional in the common case.
 //
 // What it does:
 //   1. Find the project root and open the index DB (same convention
@@ -27,9 +33,11 @@
 
 namespace vectra::cli {
 
-struct FixOptions {
-    // The task description sent to Claude. Required.
-    std::string task;
+struct AskOptions {
+    // The task description sent to Claude. Multiple positional words
+    // are joined with spaces, so both `vectra ask "rename Foo"` and
+    // `vectra ask rename Foo` produce the same prompt.
+    std::vector<std::string> task_words;
 
     // Project root. Auto-detected (walk up from CWD looking for
     // .vectra or .git) when empty.
@@ -63,6 +71,6 @@ struct FixOptions {
     bool print_prompt = false;
 };
 
-[[nodiscard]] int run_fix(const FixOptions& opts);
+[[nodiscard]] int run_ask(const AskOptions& opts);
 
 }  // namespace vectra::cli

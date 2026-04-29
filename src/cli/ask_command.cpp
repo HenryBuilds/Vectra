@@ -1,6 +1,6 @@
 // Copyright 2026 Vectra Contributors. Apache-2.0.
 
-#include "fix_command.hpp"
+#include "ask_command.hpp"
 
 #include <fmt/format.h>
 
@@ -57,8 +57,24 @@ namespace fs = std::filesystem;
 
 }  // namespace
 
-int run_fix(const FixOptions& opts) {
-    if (opts.task.empty()) {
+namespace {
+
+[[nodiscard]] std::string join_task(const std::vector<std::string>& words) {
+    std::string out;
+    for (std::size_t i = 0; i < words.size(); ++i) {
+        if (i > 0) {
+            out += ' ';
+        }
+        out += words[i];
+    }
+    return out;
+}
+
+}  // namespace
+
+int run_ask(const AskOptions& opts) {
+    const std::string task = join_task(opts.task_words);
+    if (task.empty()) {
         fmt::print(stderr, "error: task is required\n");
         return 2;
     }
@@ -93,7 +109,7 @@ int run_fix(const FixOptions& opts) {
         return 1;
     }
 
-    FixOptions resolved = opts;
+    AskOptions resolved = opts;
     if (resolved.model.empty()) {
         resolved.model = project_cfg.model;
     }
@@ -191,10 +207,10 @@ int run_fix(const FixOptions& opts) {
     // ---- retrieve ----------------------------------------------------
     retrieve::RetrieveOptions r_opts;
     r_opts.k = resolved.k;
-    const auto hits = retriever.retrieve(resolved.task, r_opts);
+    const auto hits = retriever.retrieve(task, r_opts);
 
     PromptComposition comp;
-    comp.task = resolved.task;
+    comp.task = task;
     comp.context.reserve(hits.size());
     for (const auto& h : hits) {
         comp.context.push_back(to_chunk(h));
@@ -215,7 +231,7 @@ int run_fix(const FixOptions& opts) {
     // ---- dispatch to claude ------------------------------------------
     fmt::print(stderr, "\n--- claude ---\n");
 
-    TempFile tmp("vectra-fix");
+    TempFile tmp("vectra-ask");
     tmp.write(prompt);
 
     ClaudeInvocation inv;

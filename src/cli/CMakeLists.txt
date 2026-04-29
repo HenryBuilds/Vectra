@@ -1,9 +1,9 @@
 # vectra CLI — verb-based command-line entry point.
 
 add_executable(vectra
+    ask_command.cpp
     claude_subprocess.cpp
     cli_paths.cpp
-    fix_command.cpp
     index_command.cpp
     main.cpp
     project_config.cpp
