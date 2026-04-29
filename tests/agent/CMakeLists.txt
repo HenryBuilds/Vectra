@@ -7,6 +7,7 @@
 
 add_executable(vectra_agent_tests
     config_test.cpp
+    sse_parser_test.cpp
 )
 
 target_link_libraries(vectra_agent_tests
@@ -15,6 +16,12 @@ target_link_libraries(vectra_agent_tests
         vectra::compile_options
         Catch2::Catch2WithMain
 )
+
+# sse_parser is internal to vectra-agent. Surface its header to
+# the test target via the same private-include trick we use for
+# other internal-only types (parser_pool, vector_index).
+target_include_directories(vectra_agent_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/agent)
 
 set_target_properties(vectra_agent_tests PROPERTIES
     FOLDER "tests")
