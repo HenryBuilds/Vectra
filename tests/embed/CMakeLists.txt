@@ -11,6 +11,7 @@
 
 add_executable(vectra_embed_tests
     embedder_test.cpp
+    model_registry_test.cpp
 )
 
 target_link_libraries(vectra_embed_tests
