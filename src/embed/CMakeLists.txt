@@ -14,6 +14,7 @@ add_library(vectra_embed STATIC
     embedder.cpp
     model_downloader.cpp
     model_registry.cpp
+    reranker.cpp
 )
 add_library(vectra::embed ALIAS vectra_embed)
 
