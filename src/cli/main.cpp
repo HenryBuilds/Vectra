@@ -13,9 +13,7 @@
 #include <exception>
 #include <iostream>
 
-#include "fix_command.hpp"
 #include "index_command.hpp"
-#include "repl_command.hpp"
 #include "search_command.hpp"
 
 #if VECTRA_HAS_EMBED
@@ -79,67 +77,6 @@ int main(int argc, char** argv) {
     search_cmd->callback([&] {
         try {
             exit_code = vectra::cli::run_search(search_opts);
-        } catch (const std::exception& e) {
-            fmt::print(stderr, "error: {}\n", e.what());
-            exit_code = 1;
-        }
-    });
-
-    // ---- repl ------------------------------------------------------------
-    auto* repl_cmd = app.add_subcommand("repl", "Interactive coding-agent REPL");
-
-    vectra::cli::ReplCommandOptions repl_opts;
-    repl_cmd
-        ->add_option("--root",
-                     repl_opts.repo_root,
-                     "Project root (default: walk up from CWD looking for .vectra or .git)")
-        ->check(CLI::ExistingDirectory);
-    repl_cmd->add_option(
-        "--config", repl_opts.config_path, "Config file (default: <root>/.vectra/config.toml)");
-    repl_cmd
-        ->add_option("--history-limit",
-                     repl_opts.history_limit,
-                     "Cap conversation history at N user/assistant pairs (0 = unbounded)")
-        ->default_val(0);
-    repl_cmd->add_flag("--no-color", repl_opts.no_color, "Disable ANSI color output");
-    repl_cmd->add_option("--system-prompt",
-                         repl_opts.system_prompt,
-                         "Override the built-in system prompt (rarely needed)");
-    repl_cmd->callback([&] {
-        try {
-            exit_code = vectra::cli::run_repl_command(repl_opts);
-        } catch (const std::exception& e) {
-            fmt::print(stderr, "error: {}\n", e.what());
-            exit_code = 1;
-        }
-    });
-
-    // ---- fix -------------------------------------------------------------
-    auto* fix_cmd = app.add_subcommand("fix", "One-shot self-healing fix loop");
-
-    vectra::cli::FixCommandOptions fix_opts;
-    fix_cmd->add_option("task", fix_opts.task, "Task description (quote it if it has spaces)")
-        ->required();
-    fix_cmd->add_option("--root", fix_opts.repo_root, "Project root")
-        ->check(CLI::ExistingDirectory);
-    fix_cmd->add_option(
-        "--config", fix_opts.config_path, "Config file (default: <root>/.vectra/config.toml)");
-    fix_cmd->add_option(
-        "--adapters", fix_opts.adapters_dir, "Adapter manifest directory (default: auto-detect)");
-    fix_cmd
-        ->add_option("--max-iterations",
-                     fix_opts.max_iterations,
-                     "Self-healing budget — at most N retries before rolling back")
-        ->default_val(3);
-    fix_cmd->add_flag(
-        "-y,--yes", fix_opts.auto_approve, "Auto-approve every proposed patch (no y/n prompt)");
-    fix_cmd->add_flag("--no-tests",
-                      fix_opts.no_tests,
-                      "Apply once without running tests, even when an adapter is available");
-    fix_cmd->add_flag("--no-color", fix_opts.no_color, "Disable ANSI color output");
-    fix_cmd->callback([&] {
-        try {
-            exit_code = vectra::cli::run_fix_command(fix_opts);
         } catch (const std::exception& e) {
             fmt::print(stderr, "error: {}\n", e.what());
             exit_code = 1;

@@ -1,13 +1,9 @@
 # vectra CLI — verb-based command-line entry point.
 
 add_executable(vectra
-    approval.cpp
     cli_paths.cpp
-    diff_render.cpp
-    fix_command.cpp
     index_command.cpp
     main.cpp
-    repl_command.cpp
     search_command.cpp
     walker.cpp
 )
@@ -21,8 +17,6 @@ target_link_libraries(vectra
         vectra::core
         vectra::store
         vectra::retrieve
-        vectra::agent
-        vectra::exec
         vectra::compile_options
         vectra::sanitizers
         CLI11::CLI11
