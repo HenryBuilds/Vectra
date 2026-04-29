@@ -50,3 +50,31 @@ endif()
 set_target_properties(vectra PROPERTIES
     FOLDER  "vectra"
     OUTPUT_NAME "vectra")
+
+# ---------------------------------------------------------------------------
+# Install rules
+# ---------------------------------------------------------------------------
+# `cmake --install <build> --prefix <dir>` puts the binary plus the
+# vcpkg-resolved DLLs it links against into <dir>/bin. Pointing the
+# prefix at e.g. `~/.local` (already a convention on most user PATHs)
+# makes `vectra` runnable from any shell.
+include(GNUInstallDirs)
+
+install(TARGETS vectra
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+if(WIN32)
+    # On Windows the vcpkg-installed dependencies (sqlite3, fmt,
+    # spdlog, blake3, llama.cpp, openssl via crypt32, ...) are
+    # dynamic by default. TARGET_RUNTIME_DLLS expands to the set the
+    # linker reports through the import table, but it misses some
+    # libs vcpkg drops in the runtime output dir transitively
+    # (OpenSSL, tomlplusplus, brotli). Sweep *.dll alongside it as
+    # a fallback so the installed binary doesn't trip on
+    # STATUS_DLL_NOT_FOUND.
+    install(FILES $<TARGET_RUNTIME_DLLS:vectra>
+        DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        FILES_MATCHING PATTERN "*.dll")
+endif()
