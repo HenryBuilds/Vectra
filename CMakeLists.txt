@@ -178,7 +178,7 @@ add_tree_sitter_grammar(
 # ---------------------------------------------------------------------------
 # Subdirectories (added incrementally as modules land)
 # ---------------------------------------------------------------------------
-# add_subdirectory(src/core)
+add_subdirectory(src/core)
 # add_subdirectory(src/store)
 # add_subdirectory(src/embed)
 # add_subdirectory(src/retrieve)
