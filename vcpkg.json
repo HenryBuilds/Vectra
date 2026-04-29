@@ -16,6 +16,10 @@
     "abseil",
     "blake3",
     "cli11",
+    {
+      "name": "cpp-httplib",
+      "features": ["openssl"]
+    },
     "tomlplusplus",
     {
       "name": "catch2",
