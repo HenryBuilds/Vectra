@@ -106,11 +106,15 @@ endif()
 # ---------------------------------------------------------------------------
 # Dependencies (vcpkg)
 # ---------------------------------------------------------------------------
-find_package(SQLite3   CONFIG REQUIRED)
-find_package(fmt       CONFIG REQUIRED)
-find_package(spdlog    CONFIG REQUIRED)
-find_package(absl      CONFIG REQUIRED)
-find_package(BLAKE3    CONFIG REQUIRED)
+# SQLite3 in vcpkg ships only the "unofficial-sqlite3" config, not a
+# standard SQLite3Config.cmake. The exported target is
+# unofficial::sqlite3::sqlite3 — used by vectra-store once it lands.
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
+find_package(fmt                CONFIG REQUIRED)
+find_package(spdlog             CONFIG REQUIRED)
+find_package(absl               CONFIG REQUIRED)
+find_package(BLAKE3             CONFIG REQUIRED)
+find_package(tomlplusplus       CONFIG REQUIRED)
 
 if(VECTRA_BUILD_TESTS)
     find_package(Catch2 3 CONFIG REQUIRED)
@@ -125,10 +129,51 @@ endif()
 # ---------------------------------------------------------------------------
 # Vendored dependencies (third_party submodules)
 # ---------------------------------------------------------------------------
-# llama.cpp, tree-sitter, usearch, and language grammars live under
-# third_party/ as git submodules. They will be wired in once the modules
-# that need them are added (next bootstrap step). The empty directory
-# is intentional for now.
+
+# Tree-sitter runtime. The whole library compiles from a single
+# translation unit (lib.c includes everything else internally).
+add_library(tree_sitter_runtime STATIC
+    third_party/tree-sitter/lib/src/lib.c)
+add_library(vectra::tree_sitter ALIAS tree_sitter_runtime)
+target_include_directories(tree_sitter_runtime
+    PUBLIC  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/third_party/tree-sitter/lib/include>
+    PRIVATE ${CMAKE_SOURCE_DIR}/third_party/tree-sitter/lib/src)
+set_target_properties(tree_sitter_runtime PROPERTIES
+    C_STANDARD                  11
+    POSITION_INDEPENDENT_CODE   ON
+    FOLDER                      "third_party")
+if(MSVC)
+    target_compile_options(tree_sitter_runtime PRIVATE /W0)
+else()
+    target_compile_options(tree_sitter_runtime PRIVATE -w)
+endif()
+
+# Tree-sitter grammars. Build each as a static library via the helper.
+# The list mirrors the [[language]] entries in languages.toml; keep
+# both in sync until we generate one from the other.
+include(TreeSitterGrammar)
+
+set(VECTRA_GRAMMARS
+    "c"
+    "cpp"
+    "python"
+    "javascript"
+    "rust"
+    "go"
+)
+foreach(_lang IN LISTS VECTRA_GRAMMARS)
+    add_tree_sitter_grammar(
+        NAME ${_lang}
+        PATH ${CMAKE_SOURCE_DIR}/third_party/grammars/tree-sitter-${_lang})
+endforeach()
+
+# tree-sitter-typescript ships two parser variants in one repo.
+add_tree_sitter_grammar(
+    NAME typescript
+    PATH ${CMAKE_SOURCE_DIR}/third_party/grammars/tree-sitter-typescript/typescript)
+add_tree_sitter_grammar(
+    NAME tsx
+    PATH ${CMAKE_SOURCE_DIR}/third_party/grammars/tree-sitter-typescript/tsx)
 
 # ---------------------------------------------------------------------------
 # Subdirectories (added incrementally as modules land)

@@ -12,6 +12,7 @@
     "spdlog",
     "abseil",
     "blake3",
+    "tomlplusplus",
     {
       "name": "catch2",
       "host": false
