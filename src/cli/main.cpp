@@ -13,6 +13,7 @@
 #include <exception>
 #include <iostream>
 
+#include "fix_command.hpp"
 #include "index_command.hpp"
 #include "search_command.hpp"
 
@@ -77,6 +78,44 @@ int main(int argc, char** argv) {
     search_cmd->callback([&] {
         try {
             exit_code = vectra::cli::run_search(search_opts);
+        } catch (const std::exception& e) {
+            fmt::print(stderr, "error: {}\n", e.what());
+            exit_code = 1;
+        }
+    });
+
+    // ---- fix -------------------------------------------------------------
+    // RAG dispatch to Claude Code: retrieve top-K chunks for the task,
+    // compose a prompt that wraps them as <context> blocks, and shell
+    // out to `claude -p`. Vectra does not edit files itself — Claude
+    // Code's tools own that.
+    auto* fix_cmd = app.add_subcommand("fix", "Hand a task to Claude Code with retrieved context");
+
+    vectra::cli::FixOptions fix_opts;
+    fix_cmd->add_option("task", fix_opts.task, "Task description (quote it if it has spaces)")
+        ->required();
+    fix_cmd->add_option("--root", fix_opts.repo_root, "Project root (default: walk up from CWD)")
+        ->check(CLI::ExistingDirectory);
+    fix_cmd->add_option("--db", fix_opts.db, "Index DB (default: <root>/.vectra/index.db)");
+    fix_cmd->add_option("-k,--top-k", fix_opts.k, "Number of context chunks to surface")
+        ->default_val(8);
+    fix_cmd->add_option(
+        "--model", fix_opts.model, "Embedding model name (skip for symbol-only retrieval)");
+    fix_cmd->add_option("--reranker",
+                        fix_opts.reranker,
+                        "Cross-encoder reranker model name (e.g. qwen3-rerank-0.6b)");
+    fix_cmd->add_option("--claude-bin",
+                        fix_opts.claude_binary,
+                        "Override the claude binary (default: PATH lookup)");
+    fix_cmd->add_option("--claude-arg",
+                        fix_opts.claude_extra_args,
+                        "Extra flag passed through to `claude -p` (repeatable)");
+    fix_cmd->add_flag("--print-prompt",
+                      fix_opts.print_prompt,
+                      "Print the composed prompt and exit (no claude spawn)");
+    fix_cmd->callback([&] {
+        try {
+            exit_code = vectra::cli::run_fix(fix_opts);
         } catch (const std::exception& e) {
             fmt::print(stderr, "error: {}\n", e.what());
             exit_code = 1;
