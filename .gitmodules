@@ -1,0 +1,30 @@
+[submodule "third_party/llama.cpp"]
+	path = third_party/llama.cpp
+	url = https://github.com/ggerganov/llama.cpp.git
+[submodule "third_party/tree-sitter"]
+	path = third_party/tree-sitter
+	url = https://github.com/tree-sitter/tree-sitter.git
+[submodule "third_party/usearch"]
+	path = third_party/usearch
+	url = https://github.com/unum-cloud/usearch.git
+[submodule "third_party/grammars/tree-sitter-c"]
+	path = third_party/grammars/tree-sitter-c
+	url = https://github.com/tree-sitter/tree-sitter-c.git
+[submodule "third_party/grammars/tree-sitter-cpp"]
+	path = third_party/grammars/tree-sitter-cpp
+	url = https://github.com/tree-sitter/tree-sitter-cpp.git
+[submodule "third_party/grammars/tree-sitter-python"]
+	path = third_party/grammars/tree-sitter-python
+	url = https://github.com/tree-sitter/tree-sitter-python.git
+[submodule "third_party/grammars/tree-sitter-javascript"]
+	path = third_party/grammars/tree-sitter-javascript
+	url = https://github.com/tree-sitter/tree-sitter-javascript.git
+[submodule "third_party/grammars/tree-sitter-typescript"]
+	path = third_party/grammars/tree-sitter-typescript
+	url = https://github.com/tree-sitter/tree-sitter-typescript.git
+[submodule "third_party/grammars/tree-sitter-rust"]
+	path = third_party/grammars/tree-sitter-rust
+	url = https://github.com/tree-sitter/tree-sitter-rust.git
+[submodule "third_party/grammars/tree-sitter-go"]
+	path = third_party/grammars/tree-sitter-go
+	url = https://github.com/tree-sitter/tree-sitter-go.git
