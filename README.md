@@ -1,0 +1,108 @@
+# Vectra
+
+**Local-first code RAG and coding assistant.** Vectra indexes your codebase
+with tree-sitter, embeds it on-device via llama.cpp, and answers code
+questions with hybrid vector + symbol retrieval, cross-encoder reranking,
+and a self-healing patch loop. No cloud, no telemetry, single binary.
+
+> **Status:** Pre-alpha. Repository scaffolding only — no working features yet.
+> See [`architecture.md`](./architecture.md) for the design.
+
+## Why Vectra
+
+Existing code assistants either ship your code to a remote API or run a
+generic embedding model that doesn't understand code structure. Vectra
+treats code as a structured object: AST-aware chunking, hierarchical
+context (function → class → call-graph → file), hybrid retrieval that
+combines semantic similarity with exact identifier matches, and a
+language-aware execution loop that can compile and re-test patches it
+generates.
+
+Read the full architecture in [`architecture.md`](./architecture.md).
+
+## Supported Platforms
+
+| Tier | Platforms |
+|------|-----------|
+| **Tier 1** (CI + prebuilt binaries) | Linux x86_64 · Linux ARM64 · macOS ARM64 · macOS x86_64 · Windows x86_64 |
+| **Tier 2** (build-tested)           | Windows ARM64 · FreeBSD |
+
+GPU acceleration via llama.cpp: CUDA, ROCm/HIP, Metal, Vulkan.
+CPU fallback with AVX2 / NEON.
+
+## Building from source
+
+### Prerequisites
+
+- **CMake** 3.25 or newer
+- **Ninja** (recommended) or Visual Studio 2022
+- A C++20 compiler: Clang 16+, GCC 13+, or MSVC 19.36+
+- **vcpkg** (set `VCPKG_ROOT` to its install path)
+- **Git** with submodule support
+
+### Quick build
+
+```bash
+git clone --recurse-submodules https://github.com/HenryBuilds/Vectra.git
+cd Vectra
+
+# Configure + build (pick the preset matching your platform)
+cmake --preset release
+cmake --build --preset release
+
+# Run tests
+ctest --preset release
+```
+
+### Available presets
+
+| Preset | Description |
+|--------|-------------|
+| `debug` / `release` / `relwithdebinfo` | Generic single-config builds |
+| `linux-clang-release` / `linux-gcc-release` | Linux with explicit compiler |
+| `macos-clang-release` | macOS (Apple Silicon or Intel) |
+| `windows-msvc-release` / `windows-clang-release` | Windows with MSVC or clang-cl |
+| `asan` / `tsan` | Sanitizer builds (Unix only) |
+
+## Repository layout
+
+```
+vectra/
+├── architecture.md          Design document (start here)
+├── CMakeLists.txt           Top-level build
+├── CMakePresets.json        Cross-platform build presets
+├── vcpkg.json               Manifest dependencies
+├── third_party/             llama.cpp, tree-sitter, grammars (submodules)
+├── src/
+│   ├── core/                Tree-sitter chunking, Merkle index
+│   ├── store/               SQLite + usearch persistence
+│   ├── embed/               llama.cpp embedding wrapper
+│   ├── retrieve/            Hybrid query path + reranker
+│   ├── exec/                Diff, language adapters, patch loop
+│   └── cli/                 Command-line entry point
+├── include/vectra/          Public headers
+├── tests/                   Catch2 unit tests
+└── benchmarks/              google/benchmark perf tests
+```
+
+## Roadmap
+
+The work breaks down into discrete bootstrap steps:
+
+1. **Repository scaffolding** — CMake, vcpkg, presets, license, CI _(this commit)_
+2. **CI matrix** — Linux/macOS/Windows × Clang/GCC/MSVC, all green
+3. **Submodule wiring** — llama.cpp, tree-sitter, language grammars
+4. **`vectra-core`** — AST chunker + Merkle index
+5. **`vectra-store`** — SQLite schema + usearch sync
+6. **`vectra index <path>`** — first end-to-end CLI command
+7. **`vectra-embed`** — llama.cpp embedding pipeline
+8. **`vectra-retrieve`** — hybrid query + reranker
+9. **`vectra-exec`** — patch loop + language adapters
+
+## License
+
+Apache-2.0. See [`LICENSE`](./LICENSE).
+
+## Contributing
+
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md).

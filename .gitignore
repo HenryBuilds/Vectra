@@ -1,0 +1,74 @@
+# Build directories
+build/
+build-*/
+out/
+cmake-build-*/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+Makefile
+*.cmake
+!CMakeLists.txt
+!CMakePresets.json
+!cmake/*.cmake
+CTestTestfile.cmake
+_deps/
+
+# Compiled output
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.exp
+*.pdb
+*.ilk
+*.idb
+
+# vcpkg
+vcpkg_installed/
+.vcpkg-root
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cache/
+.clangd/
+compile_commands.json
+.ccls-cache/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Models & caches (downloaded at runtime)
+models/
+.vectra-cache/
+
+# Test / coverage artifacts
+*.gcno
+*.gcda
+*.gcov
+coverage/
+Testing/
+
+# Profiling
+*.prof
+perf.data*
+callgrind.out.*
+
+# Generated docs
+docs/_build/
+docs/html/

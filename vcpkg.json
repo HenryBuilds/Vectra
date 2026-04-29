@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "vectra",
+  "version-string": "0.0.1",
+  "description": "Local-first code RAG and coding assistant.",
+  "homepage": "https://github.com/HenryBuilds/Vectra",
+  "license": "Apache-2.0",
+  "supports": "(windows | linux | osx) & (x64 | arm64)",
+  "dependencies": [
+    "sqlite3",
+    "fmt",
+    "spdlog",
+    "abseil",
+    "blake3",
+    {
+      "name": "catch2",
+      "host": false
+    },
+    {
+      "name": "benchmark",
+      "host": false
+    }
+  ],
+  "features": {
+    "tests": {
+      "description": "Build unit tests.",
+      "dependencies": [
+        "catch2"
+      ]
+    },
+    "benchmarks": {
+      "description": "Build performance benchmarks.",
+      "dependencies": [
+        "benchmark"
+      ]
+    }
+  },
+  "builtin-baseline": "2024-12-01"
+}
