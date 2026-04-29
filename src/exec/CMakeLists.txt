@@ -11,6 +11,7 @@
 add_library(vectra_exec STATIC
     apply.cpp
     diff.cpp
+    patch_loop.cpp
     test_runner.cpp
 )
 add_library(vectra::exec ALIAS vectra_exec)
@@ -25,6 +26,7 @@ target_link_libraries(vectra_exec
     PUBLIC
         vectra::compile_options
         vectra::sanitizers
+        vectra::agent
     PRIVATE
         fmt::fmt
         spdlog::spdlog
