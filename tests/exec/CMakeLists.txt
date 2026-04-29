@@ -3,6 +3,7 @@
 add_executable(vectra_exec_tests
     apply_test.cpp
     diff_test.cpp
+    patch_loop_test.cpp
     test_runner_test.cpp
 )
 
