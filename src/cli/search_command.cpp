@@ -15,6 +15,7 @@
 #if VECTRA_HAS_EMBED
 #include "vectra/embed/embedder.hpp"
 #include "vectra/embed/model_registry.hpp"
+#include "vectra/embed/reranker.hpp"
 #endif
 
 namespace vectra::cli {
@@ -110,11 +111,39 @@ int run_search(const SearchOptions& opts) {
     } else {
         fmt::print(stderr, "model: (none — symbol-only retrieval)\n");
     }
+
+    // Same shape for the optional reranker. Held in unique_ptr for
+    // the same reason as Embedder (move-assignment is deleted to
+    // protect the underlying llama_context).
+    std::unique_ptr<embed::Reranker> reranker;
+    if (!opts.reranker.empty()) {
+        const auto* entry = embed::ModelRegistry::by_name(opts.reranker);
+        if (entry == nullptr) {
+            fmt::print(
+                stderr, "error: unknown reranker '{}'. Try `vectra model list`.\n", opts.reranker);
+            return 2;
+        }
+        const auto model_path = embed::ModelRegistry::local_path(*entry);
+        if (!fs::exists(model_path)) {
+            fmt::print(stderr,
+                       "error: reranker not cached. Run `vectra model pull {}` first.\n",
+                       opts.reranker);
+            return 2;
+        }
+        embed::RerankerConfig cfg;
+        cfg.model_path = model_path;
+        cfg.model_id = entry->name;
+        reranker = std::make_unique<embed::Reranker>(embed::Reranker::open(cfg));
+        retriever.set_reranker(reranker.get());
+        fmt::print(stderr, "reranker: {}\n", entry->name);
+    } else {
+        fmt::print(stderr, "reranker: (none)\n");
+    }
 #else
-    if (!opts.model.empty()) {
+    if (!opts.model.empty() || !opts.reranker.empty()) {
         fmt::print(stderr,
                    "error: this build was produced with VECTRA_BUILD_EMBED=OFF; "
-                   "the --model flag is unavailable.\n");
+                   "the --model and --reranker flags are unavailable.\n");
         return 2;
     }
     fmt::print(stderr, "model: (build without embed support — symbol-only)\n");

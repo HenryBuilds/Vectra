@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "vectra/embed/embedder.hpp"
+#include "vectra/embed/reranker.hpp"
 #include "vectra/store/store.hpp"
 
 namespace vectra::retrieve {
@@ -30,6 +31,10 @@ Retriever::Retriever(store::Store& store) noexcept : store_(store) {}
 
 void Retriever::set_embedder(const embed::Embedder* embedder) noexcept {
     embedder_ = embedder;
+}
+
+void Retriever::set_reranker(const embed::Reranker* reranker) noexcept {
+    reranker_ = reranker;
 }
 
 std::vector<Hit> Retriever::retrieve(std::string_view query, const RetrieveOptions& opts) const {
@@ -76,13 +81,18 @@ std::vector<Hit> Retriever::retrieve(std::string_view query, const RetrieveOptio
         return a.second > b.second;
     });
 
-    if (ranked.size() > opts.k) {
-        ranked.resize(opts.k);
+    // Without a reranker, only the top-K chunks need to be looked
+    // up. With a reranker we keep up to candidate_pool candidates
+    // for the cross-encoder pass, then truncate to k afterwards.
+    const std::size_t pool_size = (reranker_ != nullptr)
+                                      ? std::min(opts.candidate_pool, ranked.size())
+                                      : std::min(opts.k, ranked.size());
+    if (ranked.size() > pool_size) {
+        ranked.resize(pool_size);
     }
 
-    // ---- Materialize the chunks for the top-K ---------------------------
-    // Each get_chunk is one prepared-statement step against SQLite, so
-    // the cost is k lookups regardless of candidate_pool size.
+    // ---- Materialize the candidate chunks --------------------------------
+    // Each get_chunk is one prepared-statement step against SQLite.
     std::vector<Hit> out;
     out.reserve(ranked.size());
     for (const auto& [hash, score] : ranked) {
@@ -101,9 +111,26 @@ std::vector<Hit> Retriever::retrieve(std::string_view query, const RetrieveOptio
         h.start_row = chunk->range.start_row;
         h.end_row = chunk->range.end_row;
         h.text = chunk->text;
-        h.score = static_cast<float>(score);
+        h.fusion_score = static_cast<float>(score);
+        h.score = h.fusion_score;
         out.push_back(std::move(h));
     }
+
+    // ---- Optional cross-encoder reranking --------------------------------
+    // Score each surviving candidate jointly with the query and
+    // re-sort by the reranker's relevance score. The fusion_score is
+    // preserved on each Hit for callers that want to compare.
+    if (reranker_ != nullptr && !out.empty()) {
+        for (auto& h : out) {
+            h.score = reranker_->score(query, h.text);
+        }
+        std::sort(
+            out.begin(), out.end(), [](const Hit& a, const Hit& b) { return a.score > b.score; });
+        if (out.size() > opts.k) {
+            out.resize(opts.k);
+        }
+    }
+
     return out;
 }
 

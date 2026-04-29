@@ -2,14 +2,14 @@
 //
 // Hybrid retrieval: combines symbol-level BM25 (FTS5 trigram) with
 // vector-level ANN (usearch HNSW) into a single ranked list via
-// Reciprocal Rank Fusion. Optional embedder dependency means the
-// retriever stays usable for symbol-only search even without a
-// downloaded embedding model.
+// Reciprocal Rank Fusion. Optional embedder and reranker
+// dependencies mean the retriever degrades gracefully:
 //
-// A future commit will add a cross-encoder reranker between the
-// fused list and the final top-K. The current Retriever returns
-// fused results directly, which is already a sizeable quality lift
-// over either retrieval signal alone.
+//   - With neither: symbol-only search via FTS5.
+//   - With embedder only: hybrid RRF.
+//   - With embedder + reranker: hybrid RRF, then a cross-encoder
+//     pass that re-scores the top candidate_pool jointly with the
+//     query before truncating to k.
 
 #pragma once
 
@@ -26,7 +26,8 @@ class Store;
 
 namespace vectra::embed {
 class Embedder;
-}
+class Reranker;
+}  // namespace vectra::embed
 
 namespace vectra::retrieve {
 
@@ -40,7 +41,14 @@ struct Hit {
     std::uint32_t start_row = 0;
     std::uint32_t end_row = 0;
     std::string text;
-    float score = 0.0F;  // RRF-fused rank score, higher is better
+
+    // Higher is better. Carries the cross-encoder relevance score
+    // when a reranker was attached, otherwise the RRF fusion score.
+    float score = 0.0F;
+    // Always set to the pre-rerank fusion score when a reranker is
+    // active, so callers that want to compare the two signals can.
+    // Equals `score` when no reranker is attached.
+    float fusion_score = 0.0F;
 };
 
 struct RetrieveOptions {
@@ -71,6 +79,13 @@ public:
     // this Retriever while attached.
     void set_embedder(const embed::Embedder* embedder) noexcept;
 
+    // Attach a cross-encoder reranker. Optional: when null, retrieve()
+    // returns the RRF-fused list directly. When set, the reranker is
+    // applied to the top `candidate_pool` after fusion and the final
+    // ordering is by reranker score. Pointer assignment; the reranker
+    // must outlive the Retriever while attached.
+    void set_reranker(const embed::Reranker* reranker) noexcept;
+
     // Run a query against the index. Returns at most opts.k hits,
     // ordered by descending score (best first).
     [[nodiscard]] std::vector<Hit> retrieve(std::string_view query,
@@ -79,6 +94,7 @@ public:
 private:
     store::Store& store_;
     const embed::Embedder* embedder_ = nullptr;
+    const embed::Reranker* reranker_ = nullptr;
 };
 
 }  // namespace vectra::retrieve

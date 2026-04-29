@@ -69,6 +69,9 @@ int main(int argc, char** argv) {
         ->default_val(10);
     search_cmd->add_option(
         "--model", search_opts.model, "Embedding model name (skip for symbol-only retrieval)");
+    search_cmd->add_option("--reranker",
+                           search_opts.reranker,
+                           "Cross-encoder reranker model name (e.g. qwen3-rerank-0.6b)");
     search_cmd->add_flag(
         "--show-text", search_opts.show_text, "Print full chunk text under each hit");
     search_cmd->callback([&] {

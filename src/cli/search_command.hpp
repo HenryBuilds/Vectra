@@ -31,6 +31,12 @@ struct SearchOptions {
     // exact-identifier lookups.
     std::string model;
 
+    // Built-in registry name of a cross-encoder reranker (e.g.
+    // "qwen3-rerank-0.6b"). When set, the retriever applies the
+    // reranker to the post-fusion candidate pool before truncating
+    // to k. Empty means "skip reranking" — fusion score is final.
+    std::string reranker;
+
     // Print full chunk text under each hit. Off by default; the
     // default output is one line per hit so a long result list stays
     // scannable.
