@@ -1,12 +1,11 @@
 // Copyright 2026 Vectra Contributors. Apache-2.0.
 
+#include "vector_index.hpp"  // resolved via the test target's include path
+
 #include <array>
+#include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <vector>
-
-#include <catch2/catch_test_macros.hpp>
-
-#include "vector_index.hpp"  // resolved via the test target's include path
 
 using vectra::store::detail::VectorIndex;
 
@@ -17,10 +16,12 @@ namespace {
 std::vector<float> make_vec(std::initializer_list<float> values) {
     std::vector<float> v(values);
     float norm = 0.0F;
-    for (float x : v) norm += x * x;
+    for (float x : v)
+        norm += x * x;
     norm = std::sqrt(norm);
     if (norm > 0.0F) {
-        for (auto& x : v) x /= norm;
+        for (auto& x : v)
+            x /= norm;
     }
     return v;
 }
@@ -30,7 +31,7 @@ std::vector<float> make_vec(std::initializer_list<float> values) {
 TEST_CASE("VectorIndex: empty search returns no hits", "[vector_index]") {
     VectorIndex idx(4);
     const auto query = make_vec({1, 0, 0, 0});
-    const auto hits  = idx.search(query, 5);
+    const auto hits = idx.search(query, 5);
     REQUIRE(hits.empty());
     REQUIRE(idx.size() == 0);
 }
@@ -62,7 +63,7 @@ TEST_CASE("VectorIndex: top-k search returns hits ordered by distance", "[vector
     idx.upsert(30, make_vec({0, 1, 0, 0}));
 
     const auto query = make_vec({1, 0, 0, 0});
-    const auto hits  = idx.search(query, 3);
+    const auto hits = idx.search(query, 3);
 
     REQUIRE(hits.size() == 3);
     // Closest first: 10 (identical), 20 (mostly aligned), 30 (orthogonal).

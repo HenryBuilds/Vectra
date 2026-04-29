@@ -1,17 +1,17 @@
 // Copyright 2026 Vectra Contributors. Apache-2.0.
 
+#include "vectra/store/store.hpp"
+
 #include <algorithm>
 #include <atomic>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
 #include <system_error>
 #include <vector>
 
-#include <catch2/catch_test_macros.hpp>
-
 #include "vectra/core/chunk.hpp"
 #include "vectra/core/hash.hpp"
-#include "vectra/store/store.hpp"
 
 using vectra::core::Blake3Hash;
 using vectra::core::Chunk;
@@ -36,31 +36,30 @@ namespace {
 // The file (and its WAL/SHM siblings) is removed before the path is
 // returned so each test starts from a clean slate.
 std::filesystem::path tmp_db_path() {
-    static const auto session_id = std::to_string(
-        std::chrono::steady_clock::now().time_since_epoch().count());
+    static const auto session_id =
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
     static std::atomic<int> counter{0};
 
     auto base = std::filesystem::temp_directory_path() / "vectra-test";
     std::filesystem::create_directories(base);
 
-    auto p = base / ("store-" + session_id + "-" +
-                     std::to_string(counter.fetch_add(1)) + ".db");
+    auto p = base / ("store-" + session_id + "-" + std::to_string(counter.fetch_add(1)) + ".db");
     std::error_code ec;
-    std::filesystem::remove(p,                                ec);
-    std::filesystem::remove(p.string() + "-wal",              ec);
-    std::filesystem::remove(p.string() + "-shm",              ec);
-    std::filesystem::remove(p.string() + "-journal",          ec);
+    std::filesystem::remove(p, ec);
+    std::filesystem::remove(p.string() + "-wal", ec);
+    std::filesystem::remove(p.string() + "-shm", ec);
+    std::filesystem::remove(p.string() + "-journal", ec);
     return p;
 }
 
 Chunk make_chunk(std::string symbol, std::string text, ChunkKind kind = ChunkKind::Function) {
     Chunk c;
-    c.language     = "python";
-    c.kind         = kind;
-    c.symbol       = std::move(symbol);
-    c.range        = Range{0, static_cast<uint32_t>(text.size()), 0, 0};
+    c.language = "python";
+    c.kind = kind;
+    c.symbol = std::move(symbol);
+    c.range = Range{0, static_cast<uint32_t>(text.size()), 0, 0};
     c.content_hash = hash_string(text);
-    c.text         = std::move(text);
+    c.text = std::move(text);
     return c;
 }
 
@@ -113,7 +112,7 @@ TEST_CASE("Store: delete_chunks_for_file cascades to symbols", "[store]") {
     auto store = Store::open(path);
 
     auto a = make_chunk("alpha", "def alpha(): pass");
-    auto b = make_chunk("beta",  "def beta(): pass");
+    auto b = make_chunk("beta", "def beta(): pass");
 
     store.put_chunk("file.py", a);
     store.put_chunk("file.py", b);
@@ -135,15 +134,14 @@ TEST_CASE("Store: search_symbols matches via trigram prefix", "[store]") {
     auto path = tmp_db_path();
     auto store = Store::open(path);
 
-    store.put_chunk("a.py", make_chunk("getUser",      "def getUser(): pass"));
-    store.put_chunk("b.py", make_chunk("getUserByID",  "def getUserByID(): pass"));
-    store.put_chunk("c.py", make_chunk("setPassword",  "def setPassword(): pass"));
+    store.put_chunk("a.py", make_chunk("getUser", "def getUser(): pass"));
+    store.put_chunk("b.py", make_chunk("getUserByID", "def getUserByID(): pass"));
+    store.put_chunk("c.py", make_chunk("setPassword", "def setPassword(): pass"));
 
     auto hits = store.search_symbols("getUser");
     REQUIRE(hits.size() == 2);
     const bool has_user_by_id = std::any_of(
-        hits.begin(), hits.end(),
-        [](const auto& h) { return h.symbol == "getUserByID"; });
+        hits.begin(), hits.end(), [](const auto& h) { return h.symbol == "getUserByID"; });
     REQUIRE(has_user_by_id);
 
     REQUIRE(store.search_symbols("setPassword").size() == 1);
@@ -151,7 +149,7 @@ TEST_CASE("Store: search_symbols matches via trigram prefix", "[store]") {
 }
 
 TEST_CASE("Store: file records round-trip", "[store]") {
-    auto path  = tmp_db_path();
+    auto path = tmp_db_path();
     auto store = Store::open(path);
 
     FileRecord r{"src/main.py", "deadbeef", 1700000000};
@@ -176,7 +174,7 @@ TEST_CASE("Store: embedding round-trip and vector search", "[store]") {
     auto store = Store::open(path);
 
     auto c1 = make_chunk("alpha", "def alpha(): pass");
-    auto c2 = make_chunk("beta",  "def beta(): pass");
+    auto c2 = make_chunk("beta", "def beta(): pass");
     store.put_chunk("f.py", c1);
     store.put_chunk("f.py", c2);
 
@@ -211,8 +209,8 @@ TEST_CASE("Store: chunks_missing_embedding lists chunks without an embedding", "
     auto missing = store.chunks_missing_embedding("qwen3-0.6b");
     REQUIRE(missing.size() == 2);
 
-    store.put_embedding(a.content_hash.to_hex(), "qwen3-0.6b",
-                        std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F});
+    store.put_embedding(
+        a.content_hash.to_hex(), "qwen3-0.6b", std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F});
 
     missing = store.chunks_missing_embedding("qwen3-0.6b");
     REQUIRE(missing.size() == 1);
@@ -226,8 +224,8 @@ TEST_CASE("Store: reopen sees prior chunks and rebuilds the vector index", "[sto
     {
         auto store = Store::open(path);
         store.put_chunk("p.py", c);
-        store.put_embedding(c.content_hash.to_hex(), "qwen3-0.6b",
-                            std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F});
+        store.put_embedding(
+            c.content_hash.to_hex(), "qwen3-0.6b", std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F});
     }
 
     auto store = Store::open(path);

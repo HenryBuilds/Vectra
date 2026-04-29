@@ -6,20 +6,21 @@
 
 #pragma once
 
+#include <sqlite3.h>
+
 #include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
 #include <string_view>
 
-#include <sqlite3.h>
-
 namespace vectra::store::detail {
 
 // RAII handle for a SQLite connection.
 struct SqliteCloser {
     void operator()(sqlite3* db) const noexcept {
-        if (db != nullptr) sqlite3_close_v2(db);
+        if (db != nullptr)
+            sqlite3_close_v2(db);
     }
 };
 using SqliteHandle = std::unique_ptr<sqlite3, SqliteCloser>;
@@ -28,7 +29,8 @@ using SqliteHandle = std::unique_ptr<sqlite3, SqliteCloser>;
 // without destroying the prepared statement (cheaper for repeated use).
 struct StmtFinalizer {
     void operator()(sqlite3_stmt* s) const noexcept {
-        if (s != nullptr) sqlite3_finalize(s);
+        if (s != nullptr)
+            sqlite3_finalize(s);
     }
 };
 using StmtHandle = std::unique_ptr<sqlite3_stmt, StmtFinalizer>;
@@ -44,8 +46,9 @@ public:
             sqlite3_clear_bindings(stmt_);
         }
     }
-    ResetGuard(const ResetGuard&)            = delete;
+    ResetGuard(const ResetGuard&) = delete;
     ResetGuard& operator=(const ResetGuard&) = delete;
+
 private:
     sqlite3_stmt* stmt_;
 };
@@ -88,9 +91,8 @@ inline void bind_int(sqlite3_stmt* s, int pos, int v) {
     sqlite3_bind_int(s, pos, v);
 }
 inline void bind_blob(sqlite3_stmt* s, int pos, std::span<const std::byte> bytes) {
-    sqlite3_bind_blob64(s, pos, bytes.data(),
-                        static_cast<sqlite3_uint64>(bytes.size()),
-                        SQLITE_TRANSIENT);
+    sqlite3_bind_blob64(
+        s, pos, bytes.data(), static_cast<sqlite3_uint64>(bytes.size()), SQLITE_TRANSIENT);
 }
 inline void bind_null(sqlite3_stmt* s, int pos) {
     sqlite3_bind_null(s, pos);
@@ -99,8 +101,9 @@ inline void bind_null(sqlite3_stmt* s, int pos) {
 // Column readers. Position is 0-indexed, matching the SQLite C API.
 inline std::string column_text(sqlite3_stmt* s, int pos) {
     const auto* p = sqlite3_column_text(s, pos);
-    if (p == nullptr) return {};
-    const int  n = sqlite3_column_bytes(s, pos);
+    if (p == nullptr)
+        return {};
+    const int n = sqlite3_column_bytes(s, pos);
     return {reinterpret_cast<const char*>(p), static_cast<std::size_t>(n)};
 }
 inline int64_t column_int64(sqlite3_stmt* s, int pos) {
@@ -112,7 +115,7 @@ inline int column_int(sqlite3_stmt* s, int pos) {
 // Returns a view valid until the next call on this statement.
 inline std::span<const std::byte> column_blob(sqlite3_stmt* s, int pos) {
     const void* p = sqlite3_column_blob(s, pos);
-    const int   n = sqlite3_column_bytes(s, pos);
+    const int n = sqlite3_column_bytes(s, pos);
     return {static_cast<const std::byte*>(p), static_cast<std::size_t>(n)};
 }
 

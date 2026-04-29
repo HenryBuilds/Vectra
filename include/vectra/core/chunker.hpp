@@ -30,8 +30,7 @@ public:
     // if the language's query source fails to compile (which is a
     // bug in the query file, not user input — should be caught by
     // tests before shipping).
-    [[nodiscard]] std::vector<Chunk> chunk(std::string_view source,
-                                           const Language& lang) const;
+    [[nodiscard]] std::vector<Chunk> chunk(std::string_view source, const Language& lang) const;
 
     // Convenience overload that resolves the language from a file
     // path's extension. Returns an empty vector for paths whose
@@ -41,7 +40,7 @@ public:
 
 private:
     const LanguageRegistry& registry_;
-    ParserPool&             pool_;
+    ParserPool& pool_;
 };
 
 }  // namespace vectra::core

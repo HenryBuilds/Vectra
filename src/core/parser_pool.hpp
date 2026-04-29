@@ -33,22 +33,22 @@ class ParserPool;
 // RAII lease on a parser. Destructor returns the parser to the pool.
 class ParserLease {
 public:
-    ParserLease(const ParserLease&)            = delete;
+    ParserLease(const ParserLease&) = delete;
     ParserLease& operator=(const ParserLease&) = delete;
     ParserLease(ParserLease&& other) noexcept;
     ParserLease& operator=(ParserLease&& other) noexcept;
     ~ParserLease();
 
-    [[nodiscard]] TSParser*  get() const noexcept { return parser_; }
-    [[nodiscard]] TSParser*  operator->() const noexcept { return parser_; }
+    [[nodiscard]] TSParser* get() const noexcept { return parser_; }
+    [[nodiscard]] TSParser* operator->() const noexcept { return parser_; }
 
 private:
     friend class ParserPool;
     ParserLease(ParserPool* owner, std::string language, TSParser* parser);
 
-    ParserPool* owner_   = nullptr;
+    ParserPool* owner_ = nullptr;
     std::string language_;
-    TSParser*   parser_  = nullptr;
+    TSParser* parser_ = nullptr;
 };
 
 class ParserPool {
@@ -56,7 +56,7 @@ public:
     explicit ParserPool(const LanguageRegistry& registry);
     ~ParserPool();
 
-    ParserPool(const ParserPool&)            = delete;
+    ParserPool(const ParserPool&) = delete;
     ParserPool& operator=(const ParserPool&) = delete;
 
     // Acquire a parser for `language`. The parser already has its
@@ -68,9 +68,9 @@ private:
     friend class ParserLease;
     void release(const std::string& language, TSParser* parser) noexcept;
 
-    const LanguageRegistry&                                   registry_;
-    std::mutex                                                mutex_;
-    std::unordered_map<std::string, std::vector<TSParser*>>   available_;
+    const LanguageRegistry& registry_;
+    std::mutex mutex_;
+    std::unordered_map<std::string, std::vector<TSParser*>> available_;
 };
 
 }  // namespace vectra::core

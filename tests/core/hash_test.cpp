@@ -1,10 +1,9 @@
 // Copyright 2026 Vectra Contributors. Apache-2.0.
 
-#include <string>
+#include "vectra/core/hash.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-
-#include "vectra/core/hash.hpp"
+#include <string>
 
 using vectra::core::Blake3Hash;
 using vectra::core::hash_string;
@@ -12,15 +11,13 @@ using vectra::core::hash_string;
 TEST_CASE("Blake3 hash of empty string matches the published vector", "[hash]") {
     // Empty-input vector from the reference Blake3 spec.
     const auto h = hash_string("");
-    REQUIRE(h.to_hex() ==
-            "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262");
+    REQUIRE(h.to_hex() == "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262");
 }
 
 TEST_CASE("Blake3 hash of 'abc' matches the published vector", "[hash]") {
     // Three-byte vector from the reference Blake3 spec.
     const auto h = hash_string("abc");
-    REQUIRE(h.to_hex() ==
-            "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85");
+    REQUIRE(h.to_hex() == "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85");
 }
 
 TEST_CASE("hex round-trip preserves the digest", "[hash]") {

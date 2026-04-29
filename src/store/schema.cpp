@@ -2,9 +2,9 @@
 
 #include "schema.hpp"
 
-#include <stdexcept>
-
 #include <fmt/format.h>
+
+#include <stdexcept>
 
 #include "sqlite_helpers.hpp"
 
@@ -83,7 +83,7 @@ constexpr const char* kSchemaV1 = R"SQL(
 
 [[nodiscard]] int read_user_version(sqlite3* db) {
     StmtHandle stmt = prepare(db, "PRAGMA user_version");
-    const int  rc   = sqlite3_step(stmt.get());
+    const int rc = sqlite3_step(stmt.get());
     check(db, rc, "read PRAGMA user_version");
     return column_int(stmt.get(), 0);
 }
@@ -99,11 +99,12 @@ void ensure_schema(sqlite3* db) {
 
     const int existing = read_user_version(db);
     if (existing > kSchemaVersion) {
-        throw std::runtime_error(fmt::format(
-            "vectra: database schema version is {}, but this binary "
-            "only understands up to version {}. Use a newer Vectra build "
-            "or start from a fresh index.",
-            existing, kSchemaVersion));
+        throw std::runtime_error(
+            fmt::format("vectra: database schema version is {}, but this binary "
+                        "only understands up to version {}. Use a newer Vectra build "
+                        "or start from a fresh index.",
+                        existing,
+                        kSchemaVersion));
     }
 
     // user_version 0 means a fresh database. Any older non-zero
@@ -116,10 +117,11 @@ void ensure_schema(sqlite3* db) {
             write_user_version(db, kSchemaVersion);
         });
     } else if (existing != kSchemaVersion) {
-        throw std::runtime_error(fmt::format(
-            "vectra: database is at schema version {} but no migration "
-            "path to {} is implemented yet.",
-            existing, kSchemaVersion));
+        throw std::runtime_error(
+            fmt::format("vectra: database is at schema version {} but no migration "
+                        "path to {} is implemented yet.",
+                        existing,
+                        kSchemaVersion));
     }
 }
 

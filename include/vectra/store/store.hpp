@@ -34,21 +34,21 @@ namespace vectra::store {
 struct FileRecord {
     std::string path;
     std::string file_blake3;
-    int64_t     last_indexed_at = 0;
+    int64_t last_indexed_at = 0;
 };
 
 // One row from a symbol search.
 struct SymbolHit {
-    std::string       chunk_hash;
-    std::string       symbol;
-    core::ChunkKind   kind = core::ChunkKind::Unknown;
-    double            score = 0.0;     // FTS5 bm25 score, lower is better
+    std::string chunk_hash;
+    std::string symbol;
+    core::ChunkKind kind = core::ChunkKind::Unknown;
+    double score = 0.0;  // FTS5 bm25 score, lower is better
 };
 
 // One row from an approximate-nearest-neighbor vector search.
 struct VectorHit {
     std::string chunk_hash;
-    float       distance = 0.0F;       // 1 - cosine similarity, lower is closer
+    float distance = 0.0F;  // 1 - cosine similarity, lower is closer
 };
 
 class Store {
@@ -63,7 +63,7 @@ public:
     ~Store();
     Store(Store&&) noexcept;
     Store& operator=(Store&&) noexcept;
-    Store(const Store&)            = delete;
+    Store(const Store&) = delete;
     Store& operator=(const Store&) = delete;
 
     // ---- Chunks --------------------------------------------------------
@@ -103,16 +103,18 @@ public:
     //
     // Replacing an existing embedding (same chunk, same model) is
     // allowed and updates both stores atomically.
-    void put_embedding(std::string_view       chunk_hash,
-                       std::string_view       model_id,
+    void put_embedding(std::string_view chunk_hash,
+                       std::string_view model_id,
                        std::span<const float> vector);
 
     // Retrieve a stored embedding. Returns nullopt if none exists.
-    [[nodiscard]] std::optional<std::vector<float>> get_embedding(std::string_view chunk_hash) const;
+    [[nodiscard]] std::optional<std::vector<float>> get_embedding(
+        std::string_view chunk_hash) const;
 
     // Hashes of chunks that exist in the chunks table but have no
     // embedding row for `model_id`. Useful for batched re-embedding.
-    [[nodiscard]] std::vector<std::string> chunks_missing_embedding(std::string_view model_id) const;
+    [[nodiscard]] std::vector<std::string> chunks_missing_embedding(
+        std::string_view model_id) const;
 
     [[nodiscard]] std::size_t embedding_count() const;
 
@@ -123,7 +125,7 @@ public:
     // (closest first). The query vector must match the dimension of
     // the model used during indexing.
     [[nodiscard]] std::vector<VectorHit> search_vectors(std::span<const float> query,
-                                                        std::size_t            k) const;
+                                                        std::size_t k) const;
 
     // ---- File metadata -------------------------------------------------
 
@@ -138,7 +140,7 @@ public:
     // case-insensitively and supports tokens, prefixes, and partial
     // matches via FTS5 trigram tokenization.
     [[nodiscard]] std::vector<SymbolHit> search_symbols(std::string_view query,
-                                                        std::size_t      limit = 50) const;
+                                                        std::size_t limit = 50) const;
 
     // ---- Schema --------------------------------------------------------
 

@@ -31,19 +31,19 @@ namespace vectra::core {
 // are filled in by LanguageRegistry after the TOML parse — they hold
 // the resolved grammar pointer and the loaded query source text.
 struct Language {
-    std::string                       name;
-    std::vector<std::string>          extensions;
-    std::filesystem::path             grammar_dir;
-    std::string                       symbol;
-    std::filesystem::path             chunks_query_path;
-    std::filesystem::path             symbols_query_path;
-    std::filesystem::path             imports_query_path;
+    std::string name;
+    std::vector<std::string> extensions;
+    std::filesystem::path grammar_dir;
+    std::string symbol;
+    std::filesystem::path chunks_query_path;
+    std::filesystem::path symbols_query_path;
+    std::filesystem::path imports_query_path;
 
     // Resolved at registry construction time.
-    const TSLanguage*                 ts_language = nullptr;
-    std::string                       chunks_query_source;
-    std::string                       symbols_query_source;
-    std::string                       imports_query_source;
+    const TSLanguage* ts_language = nullptr;
+    std::string chunks_query_source;
+    std::string symbols_query_source;
+    std::string imports_query_source;
 };
 
 class LanguageRegistry {
@@ -68,7 +68,7 @@ public:
 private:
     LanguageRegistry() = default;
 
-    std::vector<Language>                       languages_;
+    std::vector<Language> languages_;
     std::unordered_map<std::string, std::size_t> by_name_;
     std::unordered_map<std::string, std::size_t> by_extension_;
 };

@@ -20,8 +20,8 @@ namespace vectra::store::detail {
 class VectorIndex {
 public:
     struct Hit {
-        std::uint64_t key      = 0;
-        float         distance = 0.0F;
+        std::uint64_t key = 0;
+        float distance = 0.0F;
     };
 
     // Construct an empty index for vectors of `dim` float32 elements,
@@ -31,7 +31,7 @@ public:
     explicit VectorIndex(std::uint32_t dim);
     ~VectorIndex();
 
-    VectorIndex(const VectorIndex&)            = delete;
+    VectorIndex(const VectorIndex&) = delete;
     VectorIndex& operator=(const VectorIndex&) = delete;
     VectorIndex(VectorIndex&&) noexcept;
     VectorIndex& operator=(VectorIndex&&) noexcept;
@@ -49,17 +49,16 @@ public:
 
     // Search for the `k` nearest neighbors. Hits are ordered by
     // ascending distance (closest first).
-    [[nodiscard]] std::vector<Hit> search(std::span<const float> query,
-                                          std::size_t            k) const;
+    [[nodiscard]] std::vector<Hit> search(std::span<const float> query, std::size_t k) const;
 
     [[nodiscard]] std::size_t size() const noexcept;
     [[nodiscard]] std::uint32_t dim() const noexcept { return dim_; }
 
 private:
     struct Impl;
-    std::unique_ptr<Impl>  impl_;
-    std::uint32_t          dim_;
-    mutable std::mutex     mutex_;
+    std::unique_ptr<Impl> impl_;
+    std::uint32_t dim_;
+    mutable std::mutex mutex_;
 };
 
 }  // namespace vectra::store::detail

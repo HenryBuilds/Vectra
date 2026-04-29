@@ -2,12 +2,12 @@
 
 #include "vectra/core/chunker.hpp"
 
+#include <fmt/format.h>
+#include <tree_sitter/api.h>
+
 #include <cstdint>
 #include <stdexcept>
 #include <string>
-
-#include <fmt/format.h>
-#include <tree_sitter/api.h>
 
 #include "parser_pool.hpp"
 
@@ -20,42 +20,78 @@ namespace {
 // the grammar, so this stays valid as long as upstream grammars don't
 // rename their node types (which is a stable contract in practice).
 [[nodiscard]] ChunkKind kind_from_node_type(std::string_view node_type) noexcept {
-    if (node_type == "function_definition")            return ChunkKind::Function;
-    if (node_type == "function_declaration")           return ChunkKind::Function;
-    if (node_type == "function_item")                  return ChunkKind::Function;
-    if (node_type == "generator_function_declaration") return ChunkKind::Function;
-    if (node_type == "method_definition")              return ChunkKind::Method;
-    if (node_type == "method_declaration")             return ChunkKind::Method;
-    if (node_type == "class_definition")               return ChunkKind::Class;
-    if (node_type == "class_declaration")              return ChunkKind::Class;
-    if (node_type == "class_specifier")                return ChunkKind::Class;
-    if (node_type == "struct_specifier")               return ChunkKind::Class;
-    if (node_type == "struct_item")                    return ChunkKind::Class;
-    if (node_type == "union_specifier")                return ChunkKind::Class;
-    if (node_type == "union_item")                     return ChunkKind::Class;
-    if (node_type == "interface_declaration")          return ChunkKind::Class;
-    if (node_type == "trait_item")                     return ChunkKind::Class;
-    if (node_type == "impl_item")                      return ChunkKind::Class;
-    if (node_type == "enum_specifier")                 return ChunkKind::Enum;
-    if (node_type == "enum_item")                      return ChunkKind::Enum;
-    if (node_type == "enum_declaration")               return ChunkKind::Enum;
-    if (node_type == "namespace_definition")           return ChunkKind::Namespace;
-    if (node_type == "internal_module")                return ChunkKind::Namespace;
-    if (node_type == "mod_item")                       return ChunkKind::Namespace;
-    if (node_type == "preproc_function_def")           return ChunkKind::Macro;
-    if (node_type == "macro_definition")               return ChunkKind::Macro;
-    if (node_type == "type_definition")                return ChunkKind::TypeAlias;
-    if (node_type == "type_alias_declaration")         return ChunkKind::TypeAlias;
-    if (node_type == "type_item")                      return ChunkKind::TypeAlias;
-    if (node_type == "type_declaration")               return ChunkKind::TypeAlias;
-    if (node_type == "alias_declaration")              return ChunkKind::TypeAlias;
-    if (node_type == "const_item")                     return ChunkKind::Constant;
-    if (node_type == "static_item")                    return ChunkKind::Constant;
-    if (node_type == "const_declaration")              return ChunkKind::Constant;
-    if (node_type == "var_declaration")                return ChunkKind::Constant;
-    if (node_type == "decorated_definition")           return ChunkKind::Other;  // refined below
-    if (node_type == "template_declaration")           return ChunkKind::Other;
-    if (node_type == "variable_declarator")            return ChunkKind::Function;  // bound arrow / fn expr
+    if (node_type == "function_definition")
+        return ChunkKind::Function;
+    if (node_type == "function_declaration")
+        return ChunkKind::Function;
+    if (node_type == "function_item")
+        return ChunkKind::Function;
+    if (node_type == "generator_function_declaration")
+        return ChunkKind::Function;
+    if (node_type == "method_definition")
+        return ChunkKind::Method;
+    if (node_type == "method_declaration")
+        return ChunkKind::Method;
+    if (node_type == "class_definition")
+        return ChunkKind::Class;
+    if (node_type == "class_declaration")
+        return ChunkKind::Class;
+    if (node_type == "class_specifier")
+        return ChunkKind::Class;
+    if (node_type == "struct_specifier")
+        return ChunkKind::Class;
+    if (node_type == "struct_item")
+        return ChunkKind::Class;
+    if (node_type == "union_specifier")
+        return ChunkKind::Class;
+    if (node_type == "union_item")
+        return ChunkKind::Class;
+    if (node_type == "interface_declaration")
+        return ChunkKind::Class;
+    if (node_type == "trait_item")
+        return ChunkKind::Class;
+    if (node_type == "impl_item")
+        return ChunkKind::Class;
+    if (node_type == "enum_specifier")
+        return ChunkKind::Enum;
+    if (node_type == "enum_item")
+        return ChunkKind::Enum;
+    if (node_type == "enum_declaration")
+        return ChunkKind::Enum;
+    if (node_type == "namespace_definition")
+        return ChunkKind::Namespace;
+    if (node_type == "internal_module")
+        return ChunkKind::Namespace;
+    if (node_type == "mod_item")
+        return ChunkKind::Namespace;
+    if (node_type == "preproc_function_def")
+        return ChunkKind::Macro;
+    if (node_type == "macro_definition")
+        return ChunkKind::Macro;
+    if (node_type == "type_definition")
+        return ChunkKind::TypeAlias;
+    if (node_type == "type_alias_declaration")
+        return ChunkKind::TypeAlias;
+    if (node_type == "type_item")
+        return ChunkKind::TypeAlias;
+    if (node_type == "type_declaration")
+        return ChunkKind::TypeAlias;
+    if (node_type == "alias_declaration")
+        return ChunkKind::TypeAlias;
+    if (node_type == "const_item")
+        return ChunkKind::Constant;
+    if (node_type == "static_item")
+        return ChunkKind::Constant;
+    if (node_type == "const_declaration")
+        return ChunkKind::Constant;
+    if (node_type == "var_declaration")
+        return ChunkKind::Constant;
+    if (node_type == "decorated_definition")
+        return ChunkKind::Other;  // refined below
+    if (node_type == "template_declaration")
+        return ChunkKind::Other;
+    if (node_type == "variable_declarator")
+        return ChunkKind::Function;  // bound arrow / fn expr
     return ChunkKind::Other;
 }
 
@@ -68,7 +104,7 @@ namespace {
         return {};
     }
     const uint32_t start = ts_node_start_byte(name);
-    const uint32_t end   = ts_node_end_byte(name);
+    const uint32_t end = ts_node_end_byte(name);
     if (end <= start || end > source.size()) {
         return {};
     }
@@ -89,31 +125,29 @@ std::vector<Chunk> Chunker::chunk(std::string_view source, const Language& lang)
     ParserLease lease = pool_.acquire(lang.name);
 
     TSTree* tree = ts_parser_parse_string(
-        lease.get(),
-        nullptr,
-        source.data(),
-        static_cast<uint32_t>(source.size()));
+        lease.get(), nullptr, source.data(), static_cast<uint32_t>(source.size()));
     if (tree == nullptr) {
-        throw std::runtime_error(fmt::format(
-            "ts_parser_parse_string returned null for language '{}'", lang.name));
+        throw std::runtime_error(
+            fmt::format("ts_parser_parse_string returned null for language '{}'", lang.name));
     }
 
     // Compile the chunks.scm query. We re-compile per call for now;
     // a future optimization is to cache compiled queries on the
     // Language object after first use, guarded by a once_flag.
-    uint32_t       error_offset = 0;
-    TSQueryError   error_type   = TSQueryErrorNone;
-    TSQuery* query = ts_query_new(
-        lang.ts_language,
-        lang.chunks_query_source.data(),
-        static_cast<uint32_t>(lang.chunks_query_source.size()),
-        &error_offset,
-        &error_type);
+    uint32_t error_offset = 0;
+    TSQueryError error_type = TSQueryErrorNone;
+    TSQuery* query = ts_query_new(lang.ts_language,
+                                  lang.chunks_query_source.data(),
+                                  static_cast<uint32_t>(lang.chunks_query_source.size()),
+                                  &error_offset,
+                                  &error_type);
     if (query == nullptr) {
         ts_tree_delete(tree);
-        throw std::runtime_error(fmt::format(
-            "Failed to compile chunks query for '{}' at byte {} (error type {})",
-            lang.name, error_offset, static_cast<int>(error_type)));
+        throw std::runtime_error(
+            fmt::format("Failed to compile chunks query for '{}' at byte {} (error type {})",
+                        lang.name,
+                        error_offset,
+                        static_cast<int>(error_type)));
     }
 
     TSQueryCursor* cursor = ts_query_cursor_new();
@@ -127,28 +161,28 @@ std::vector<Chunk> Chunker::chunk(std::string_view source, const Language& lang)
             const TSNode node = match.captures[i].node;
 
             const uint32_t start_byte = ts_node_start_byte(node);
-            const uint32_t end_byte   = ts_node_end_byte(node);
+            const uint32_t end_byte = ts_node_end_byte(node);
             if (end_byte <= start_byte || end_byte > source.size()) {
                 continue;
             }
 
             const TSPoint start_pt = ts_node_start_point(node);
-            const TSPoint end_pt   = ts_node_end_point(node);
+            const TSPoint end_pt = ts_node_end_point(node);
 
             const char* node_type_c = ts_node_type(node);
             const std::string_view node_type{node_type_c};
 
             Chunk c;
             c.language = lang.name;
-            c.kind     = kind_from_node_type(node_type);
-            c.symbol   = extract_symbol_name(node, source);
-            c.range    = Range{
+            c.kind = kind_from_node_type(node_type);
+            c.symbol = extract_symbol_name(node, source);
+            c.range = Range{
                 start_byte,
                 end_byte,
                 start_pt.row,
                 end_pt.row,
             };
-            c.text         = std::string(source.substr(start_byte, end_byte - start_byte));
+            c.text = std::string(source.substr(start_byte, end_byte - start_byte));
             c.content_hash = hash_string(c.text);
 
             out.push_back(std::move(c));
@@ -162,8 +196,7 @@ std::vector<Chunk> Chunker::chunk(std::string_view source, const Language& lang)
     return out;
 }
 
-std::vector<Chunk> Chunker::chunk_path(std::string_view source,
-                                       std::string_view extension) const {
+std::vector<Chunk> Chunker::chunk_path(std::string_view source, std::string_view extension) const {
     const Language* lang = registry_.by_extension(extension);
     if (lang == nullptr) {
         return {};

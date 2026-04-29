@@ -2,33 +2,33 @@
 
 #include "vector_index.hpp"
 
+#include <fmt/format.h>
+
 #include <stdexcept>
 #include <utility>
-
-#include <fmt/format.h>
 
 // usearch headers trip our strict /WX policy on harmless warnings
 // (unused parameters, signed/unsigned comparisons, ...). Silence them
 // only across this include — the rest of vector_index.cpp keeps its
 // normal warning level.
 #if defined(_MSC_VER)
-#  pragma warning(push, 0)
+#pragma warning(push, 0)
 #elif defined(__clang__)
-#  pragma clang diagnostic push
-#  pragma clang diagnostic ignored "-Weverything"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
 #elif defined(__GNUC__)
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wall"
-#  pragma GCC diagnostic ignored "-Wextra"
-#  pragma GCC diagnostic ignored "-Wpedantic"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wpedantic"
 #endif
 #include <usearch/index_dense.hpp>
 #if defined(_MSC_VER)
-#  pragma warning(pop)
+#pragma warning(pop)
 #elif defined(__clang__)
-#  pragma clang diagnostic pop
+#pragma clang diagnostic pop
 #elif defined(__GNUC__)
-#  pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 #endif
 
 namespace vectra::store::detail {
@@ -45,14 +45,13 @@ struct VectorIndex::Impl {
 namespace {
 
 [[nodiscard]] ux::index_dense_t make_index(std::uint32_t dim) {
-    auto metric = ux::metric_punned_t(static_cast<std::size_t>(dim),
-                                      ux::metric_kind_t::cos_k,
-                                      ux::scalar_kind_t::f32_k);
-    auto state  = ux::index_dense_t::make(std::move(metric));
+    auto metric = ux::metric_punned_t(
+        static_cast<std::size_t>(dim), ux::metric_kind_t::cos_k, ux::scalar_kind_t::f32_k);
+    auto state = ux::index_dense_t::make(std::move(metric));
     if (!state) {
-        throw std::runtime_error(fmt::format(
-            "usearch: failed to create dense index (dim={}): {}",
-            dim, state.error.what() ? state.error.what() : "unknown"));
+        throw std::runtime_error(fmt::format("usearch: failed to create dense index (dim={}): {}",
+                                             dim,
+                                             state.error.what() ? state.error.what() : "unknown"));
     }
     return std::move(state.index);
 }
@@ -71,7 +70,7 @@ VectorIndex& VectorIndex::operator=(VectorIndex&& other) noexcept {
     if (this != &other) {
         std::lock_guard<std::mutex> guard(mutex_);
         impl_ = std::move(other.impl_);
-        dim_  = other.dim_;
+        dim_ = other.dim_;
     }
     return *this;
 }
@@ -90,8 +89,7 @@ void VectorIndex::reserve(std::size_t capacity) {
 void VectorIndex::upsert(std::uint64_t key, std::span<const float> vector) {
     if (vector.size() != dim_) {
         throw std::runtime_error(fmt::format(
-            "VectorIndex::upsert: vector dim {} does not match index dim {}",
-            vector.size(), dim_));
+            "VectorIndex::upsert: vector dim {} does not match index dim {}", vector.size(), dim_));
     }
 
     std::lock_guard<std::mutex> guard(mutex_);
@@ -101,7 +99,7 @@ void VectorIndex::upsert(std::uint64_t key, std::span<const float> vector) {
     // or — in older versions — segfault. We double when we approach
     // the limit so amortized cost stays O(1) per insert.
     const auto current_size = impl_->index.size();
-    const auto current_cap  = impl_->index.capacity();
+    const auto current_cap = impl_->index.capacity();
     if (current_size + 1 >= current_cap) {
         const std::size_t target = std::max<std::size_t>(current_cap * 2, 64);
         ux::index_limits_t limits{target, /*threads=*/8};
@@ -114,9 +112,9 @@ void VectorIndex::upsert(std::uint64_t key, std::span<const float> vector) {
 
     auto added = impl_->index.add(key, vector.data());
     if (!added) {
-        throw std::runtime_error(fmt::format(
-            "usearch: add(key={}) failed: {}",
-            key, added.error.what() ? added.error.what() : "unknown"));
+        throw std::runtime_error(fmt::format("usearch: add(key={}) failed: {}",
+                                             key,
+                                             added.error.what() ? added.error.what() : "unknown"));
     }
 }
 
@@ -132,31 +130,30 @@ bool VectorIndex::remove(std::uint64_t key) {
 }
 
 std::vector<VectorIndex::Hit> VectorIndex::search(std::span<const float> query,
-                                                  std::size_t            k) const {
+                                                  std::size_t k) const {
     if (query.size() != dim_) {
         throw std::runtime_error(fmt::format(
-            "VectorIndex::search: query dim {} does not match index dim {}",
-            query.size(), dim_));
+            "VectorIndex::search: query dim {} does not match index dim {}", query.size(), dim_));
     }
 
     std::lock_guard<std::mutex> guard(mutex_);
     // usearch's search dereferences internal storage that may not be
     // initialized when the index is empty; short-circuit that path.
-    if (impl_->index.size() == 0) return {};
+    if (impl_->index.size() == 0)
+        return {};
 
     auto result = impl_->index.search(query.data(), k);
     if (!result) {
         throw std::runtime_error(fmt::format(
-            "usearch: search failed: {}",
-            result.error.what() ? result.error.what() : "unknown"));
+            "usearch: search failed: {}", result.error.what() ? result.error.what() : "unknown"));
     }
 
     std::vector<Hit> hits;
     hits.reserve(result.size());
     for (std::size_t i = 0; i < result.size(); ++i) {
         auto match = result[i];
-        Hit  h;
-        h.key      = static_cast<std::uint64_t>(match.member.key);
+        Hit h;
+        h.key = static_cast<std::uint64_t>(match.member.key);
         h.distance = match.distance;
         hits.push_back(h);
     }

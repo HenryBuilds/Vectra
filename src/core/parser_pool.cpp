@@ -2,11 +2,11 @@
 
 #include "parser_pool.hpp"
 
-#include <stdexcept>
-#include <utility>
-
 #include <fmt/format.h>
 #include <tree_sitter/api.h>
+
+#include <stdexcept>
+#include <utility>
 
 #include "vectra/core/language.hpp"
 
@@ -20,10 +20,8 @@ ParserLease::ParserLease(ParserPool* owner, std::string language, TSParser* pars
     : owner_(owner), language_(std::move(language)), parser_(parser) {}
 
 ParserLease::ParserLease(ParserLease&& other) noexcept
-    : owner_(other.owner_),
-      language_(std::move(other.language_)),
-      parser_(other.parser_) {
-    other.owner_  = nullptr;
+    : owner_(other.owner_), language_(std::move(other.language_)), parser_(other.parser_) {
+    other.owner_ = nullptr;
     other.parser_ = nullptr;
 }
 
@@ -32,10 +30,10 @@ ParserLease& ParserLease::operator=(ParserLease&& other) noexcept {
         if (parser_ != nullptr && owner_ != nullptr) {
             owner_->release(language_, parser_);
         }
-        owner_    = other.owner_;
+        owner_ = other.owner_;
         language_ = std::move(other.language_);
-        parser_   = other.parser_;
-        other.owner_  = nullptr;
+        parser_ = other.parser_;
+        other.owner_ = nullptr;
         other.parser_ = nullptr;
     }
     return *this;
@@ -69,8 +67,8 @@ ParserPool::~ParserPool() {
 ParserLease ParserPool::acquire(std::string_view language) {
     const Language* lang = registry_.by_name(language);
     if (lang == nullptr) {
-        throw std::runtime_error(fmt::format(
-            "ParserPool::acquire: unknown language '{}'", language));
+        throw std::runtime_error(
+            fmt::format("ParserPool::acquire: unknown language '{}'", language));
     }
 
     TSParser* parser = nullptr;
@@ -92,17 +90,18 @@ ParserLease ParserPool::acquire(std::string_view language) {
 
     if (!ts_parser_set_language(parser, lang->ts_language)) {
         ts_parser_delete(parser);
-        throw std::runtime_error(fmt::format(
-            "ts_parser_set_language failed for '{}'. This usually means the "
-            "grammar's ABI version does not match the linked tree-sitter runtime.",
-            lang->name));
+        throw std::runtime_error(
+            fmt::format("ts_parser_set_language failed for '{}'. This usually means the "
+                        "grammar's ABI version does not match the linked tree-sitter runtime.",
+                        lang->name));
     }
 
     return ParserLease(this, lang->name, parser);
 }
 
 void ParserPool::release(const std::string& language, TSParser* parser) noexcept {
-    if (parser == nullptr) return;
+    if (parser == nullptr)
+        return;
 
     // Reset parser state — the next user gets a clean slate. Resetting
     // the language is a no-op since acquire() always re-sets it.

@@ -2,10 +2,10 @@
 
 #include "vectra/core/hash.hpp"
 
+#include <blake3.h>
+
 #include <array>
 #include <cstring>
-
-#include <blake3.h>
 
 namespace vectra::core {
 
@@ -14,9 +14,12 @@ namespace {
 constexpr char kHexDigits[] = "0123456789abcdef";
 
 [[nodiscard]] int hex_value(char c) noexcept {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
     return -1;
 }
 
@@ -25,7 +28,7 @@ constexpr char kHexDigits[] = "0123456789abcdef";
 std::string Blake3Hash::to_hex() const {
     std::string out(64, '\0');
     for (std::size_t i = 0; i < bytes.size(); ++i) {
-        out[i * 2]     = kHexDigits[(bytes[i] >> 4) & 0x0F];
+        out[i * 2] = kHexDigits[(bytes[i] >> 4) & 0x0F];
         out[i * 2 + 1] = kHexDigits[bytes[i] & 0x0F];
     }
     return out;
