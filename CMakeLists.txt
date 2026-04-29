@@ -219,31 +219,37 @@ if(VECTRA_BUILD_EMBED)
     # llama.cpp uses u8"..." literals expecting them to be char[]
     # (C++17 behaviour). In C++20 those literals are char8_t[] and
     # do not implicitly convert to char*, breaking llama-chat.cpp on
-    # MSVC's strict C++20 implementation. /Zc:char8_t- restores the
-    # C++17 typing — applied per-target so Vectra's own code stays
-    # standards-conformant. Setting CMAKE_CXX_FLAGS at the parent
-    # scope did not work because llama.cpp's own CMakeLists clears
-    # certain flag categories on its targets.
-    if(MSVC)
-        foreach(_llama_target IN ITEMS
-            llama
-            ggml
-            ggml-base
-            ggml-cpu
-            ggml-blas
-            ggml-cuda
-            ggml-hip
-            ggml-metal
-            ggml-vulkan
-            ggml-rpc
-            ggml-sycl
-            ggml-kompute
-            mtmd)
-            if(TARGET ${_llama_target})
+    # every strict C++20 compiler. We restore the C++17 typing
+    # per-target so Vectra's own code stays standards-conformant:
+    #
+    #   MSVC:        /Zc:char8_t-
+    #   Clang / GCC: -fno-char8_t
+    #
+    # Setting CMAKE_CXX_FLAGS at the parent scope did not work
+    # because llama.cpp's own CMakeLists clears certain flag
+    # categories on its targets.
+    foreach(_llama_target IN ITEMS
+        llama
+        ggml
+        ggml-base
+        ggml-cpu
+        ggml-blas
+        ggml-cuda
+        ggml-hip
+        ggml-metal
+        ggml-vulkan
+        ggml-rpc
+        ggml-sycl
+        ggml-kompute
+        mtmd)
+        if(TARGET ${_llama_target})
+            if(MSVC)
                 target_compile_options(${_llama_target} PRIVATE /Zc:char8_t-)
+            else()
+                target_compile_options(${_llama_target} PRIVATE -fno-char8_t)
             endif()
-        endforeach()
-    endif()
+        endif()
+    endforeach()
 endif()
 
 # ---------------------------------------------------------------------------
