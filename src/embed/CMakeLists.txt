@@ -1,12 +1,19 @@
-# vectra-embed: llama.cpp-backed embedding inference.
+# vectra-embed: llama.cpp-backed embedding inference plus the model
+# registry and HTTPS downloader that feeds it.
 #
-# Single-binary wrapper around llama.cpp that enforces the pooling
-# strategy and instruct-prefix asymmetry that architecture.md
-# prescribes. The heavy lifting (kernels, KV cache, quantization) is
-# all llama.cpp; we only own the wiring.
+# The download path needs cpp-httplib (HTTPS via OpenSSL) for fetching
+# GGUF files from HuggingFace and the OpenSSL crypto library for the
+# SHA256 verification step.
+
+# OpenSSL is pulled in transitively by cpp-httplib's [openssl] feature,
+# but we resolve it explicitly so the SHA256 verification code can
+# include <openssl/evp.h> without depending on the order of includes.
+find_package(OpenSSL CONFIG REQUIRED)
 
 add_library(vectra_embed STATIC
     embedder.cpp
+    model_downloader.cpp
+    model_registry.cpp
 )
 add_library(vectra::embed ALIAS vectra_embed)
 
@@ -22,8 +29,16 @@ target_link_libraries(vectra_embed
         vectra::sanitizers
     PRIVATE
         llama
+        httplib::httplib
+        OpenSSL::Crypto
         fmt::fmt
         spdlog::spdlog
+)
+
+# Project version baked in for the HTTP User-Agent string. Stays in
+# sync with PROJECT_VERSION from the top-level CMakeLists.
+target_compile_definitions(vectra_embed PRIVATE
+    VECTRA_VERSION="${PROJECT_VERSION}"
 )
 
 set_target_properties(vectra_embed PROPERTIES
