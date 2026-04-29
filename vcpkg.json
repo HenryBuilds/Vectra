@@ -20,6 +20,7 @@
       "name": "cpp-httplib",
       "features": ["openssl"]
     },
+    "nlohmann-json",
     "tomlplusplus",
     {
       "name": "catch2",
