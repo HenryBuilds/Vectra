@@ -12,3 +12,4 @@ add_compile_definitions(
 )
 
 add_subdirectory(core)
+add_subdirectory(store)
