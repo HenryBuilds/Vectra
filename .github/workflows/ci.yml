@@ -30,12 +30,12 @@ jobs:
         shell: bash
         run: |
           shopt -s globstar nullglob
-          mapfile -t files < <(printf '%s\n' \
-            src/**/*.cpp src/**/*.hpp src/**/*.h src/**/*.cc src/**/*.cxx \
-            include/**/*.hpp include/**/*.h \
-            tests/**/*.cpp tests/**/*.hpp \
-            benchmarks/**/*.cpp benchmarks/**/*.hpp \
-            2>/dev/null)
+          files=(
+            src/**/*.cpp src/**/*.hpp src/**/*.h src/**/*.cc src/**/*.cxx
+            include/**/*.hpp include/**/*.h
+            tests/**/*.cpp tests/**/*.hpp
+            benchmarks/**/*.cpp benchmarks/**/*.hpp
+          )
           if [ "${#files[@]}" -eq 0 ]; then
             echo "No C/C++ source files yet — skipping format check."
             exit 0
