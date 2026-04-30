@@ -121,16 +121,6 @@ jobs:
             autoconf automake autoconf-archive \
             linux-libc-dev
 
-      # vcpkg's openssl port runs through autotools and refuses to
-      # configure without autoconf-archive. macOS runners ship
-      # autoconf and automake via Homebrew but not autoconf-archive
-      # or libtool by default — hence the arm64-osx openssl build
-      # failure we hit without this step.
-      - name: Install macOS build deps
-        if: runner.os == 'macOS'
-        run: |
-          brew install autoconf automake autoconf-archive libtool pkg-config
-
       - name: Set VCPKG_ROOT (use runner-provided vcpkg)
         shell: bash
         run: echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> $GITHUB_ENV

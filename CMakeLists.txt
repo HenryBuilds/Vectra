@@ -125,8 +125,6 @@ find_package(absl               CONFIG REQUIRED)
 find_package(BLAKE3             CONFIG REQUIRED)
 find_package(tomlplusplus       CONFIG REQUIRED)
 find_package(CLI11              CONFIG REQUIRED)
-find_package(httplib            CONFIG REQUIRED)
-find_package(nlohmann_json      CONFIG REQUIRED)
 
 if(VECTRA_BUILD_TESTS)
     find_package(Catch2 3 CONFIG REQUIRED)

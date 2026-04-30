@@ -1,14 +1,11 @@
 # vectra-embed: llama.cpp-backed embedding inference plus the model
 # registry and HTTPS downloader that feeds it.
 #
-# The download path needs cpp-httplib (HTTPS via OpenSSL) for fetching
-# GGUF files from HuggingFace and the OpenSSL crypto library for the
-# SHA256 verification step.
-
-# OpenSSL is pulled in transitively by cpp-httplib's [openssl] feature,
-# but we resolve it explicitly so the SHA256 verification code can
-# include <openssl/evp.h> without depending on the order of includes.
-find_package(OpenSSL CONFIG REQUIRED)
+# The downloader shells out to system `curl` (universal on Windows
+# 10+, macOS, and every Linux distro) and uses an in-tree
+# header-only SHA-256 for verification. Keeping cpp-httplib and
+# OpenSSL out of the dependency graph avoids vcpkg's openssl
+# arm64-osx flake without losing anything we actually need.
 
 # llama.cpp's public headers contain patterns that trip our strict
 # warning policy (struct/function name shadowing, old-style casts in
@@ -45,8 +42,6 @@ target_link_libraries(vectra_embed
         vectra::sanitizers
     PRIVATE
         llama
-        httplib::httplib
-        OpenSSL::Crypto
         fmt::fmt
         spdlog::spdlog
 )

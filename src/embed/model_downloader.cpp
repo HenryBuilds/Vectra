@@ -5,129 +5,97 @@
 #include <fmt/format.h>
 #include <spdlog/spdlog.h>
 
+#include <cstdio>
 #include <cstdlib>
-#include <fstream>
 #include <stdexcept>
+#include <string>
 #include <system_error>
 
-// cpp-httplib's SSLClient is gated behind this macro. The vcpkg
-// port with the [openssl] feature defines it for us, but we set
-// it explicitly here as a safety net in case the package config
-// changes.
-#ifndef CPPHTTPLIB_OPENSSL_SUPPORT
-#define CPPHTTPLIB_OPENSSL_SUPPORT
-#endif
+#include "sha256.hpp"
 
-#if defined(_MSC_VER)
-#pragma warning(push, 0)
-#elif defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Weverything"
-#elif defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wall"
-#pragma GCC diagnostic ignored "-Wextra"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#endif
-#include <httplib.h>
-#include <openssl/evp.h>
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#elif defined(__clang__)
-#pragma clang diagnostic pop
-#elif defined(__GNUC__)
-#pragma GCC diagnostic pop
+#ifdef _WIN32
+#define VECTRA_POPEN _popen
+#define VECTRA_PCLOSE _pclose
+#else
+#include <sys/wait.h>
+#define VECTRA_POPEN popen
+#define VECTRA_PCLOSE pclose
 #endif
 
 namespace vectra::embed::detail {
 
 namespace {
 
-struct ParsedUrl {
-    std::string scheme;
-    std::string host;
-    int port = 0;  // 0 → default for scheme
-    std::string path;
-};
+namespace fs = std::filesystem;
 
-[[nodiscard]] ParsedUrl parse_url(std::string_view url) {
-    ParsedUrl p;
-    const auto scheme_end = url.find("://");
-    if (scheme_end == std::string_view::npos) {
-        throw std::runtime_error(fmt::format("malformed URL: '{}'", url));
+[[nodiscard]] std::string shell_quote(std::string_view s) {
+    // We feed filesystem paths and an https:// URL we just typed; both
+    // are within a controlled set. Wrap in double quotes so spaces in
+    // paths survive the shell, and reject embedded quote characters
+    // out of paranoia rather than try to escape them.
+    if (s.find('"') != std::string_view::npos) {
+        throw std::runtime_error(
+            fmt::format("model downloader refuses path / URL with embedded quote: '{}'", s));
     }
-    p.scheme = std::string(url.substr(0, scheme_end));
-
-    const auto rest = url.substr(scheme_end + 3);
-    const auto path_start = rest.find('/');
-    const auto authority =
-        (path_start == std::string_view::npos) ? rest : rest.substr(0, path_start);
-    p.path = (path_start == std::string_view::npos) ? "/" : std::string(rest.substr(path_start));
-
-    const auto colon = authority.find(':');
-    if (colon == std::string_view::npos) {
-        p.host = std::string(authority);
-    } else {
-        p.host = std::string(authority.substr(0, colon));
-        p.port = std::atoi(std::string(authority.substr(colon + 1)).c_str());
-    }
-    return p;
+    std::string out;
+    out.reserve(s.size() + 2);
+    out += '"';
+    out += s;
+    out += '"';
+    return out;
 }
 
-[[nodiscard]] std::string sha256_file_hex(const std::filesystem::path& path) {
-    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    if (ctx == nullptr) {
-        throw std::runtime_error("EVP_MD_CTX_new failed");
+[[nodiscard]] int normalize_status(int popen_status) noexcept {
+#ifdef _WIN32
+    return popen_status;
+#else
+    if (WIFEXITED(popen_status)) {
+        return WEXITSTATUS(popen_status);
     }
-    if (EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) != 1) {
-        EVP_MD_CTX_free(ctx);
-        throw std::runtime_error("EVP_DigestInit_ex failed");
-    }
+    return -1;
+#endif
+}
 
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        EVP_MD_CTX_free(ctx);
-        throw std::runtime_error(fmt::format("cannot open {} for hashing", path.string()));
-    }
+// Run `curl` to download `url` to `dest`. We delegate to the system
+// curl rather than embed an HTTPS client because every supported
+// platform ships curl out of the box (Windows 10+, macOS, every
+// Linux distro), and using it sidesteps vcpkg's openssl flake on
+// macOS arm64. Output goes to stderr (curl's progress meter) so
+// the caller sees a familiar progress display; stdout is consumed
+// for protocol reasons but discarded.
+void run_curl(const std::string& url, const fs::path& dest, const std::string& user_agent) {
+    std::string cmd = "curl --location --fail --silent --show-error --progress-bar";
+    cmd += " --user-agent ";
+    cmd += shell_quote(user_agent);
+    cmd += " --output ";
+    cmd += shell_quote(dest.string());
+    cmd += ' ';
+    cmd += shell_quote(url);
 
-    constexpr std::size_t kBufSize = 64 * 1024;
-    std::array<char, kBufSize> buf{};
-    while (in.good()) {
-        in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
-        const auto n = in.gcount();
-        if (n > 0) {
-            if (EVP_DigestUpdate(ctx, buf.data(), static_cast<std::size_t>(n)) != 1) {
-                EVP_MD_CTX_free(ctx);
-                throw std::runtime_error("EVP_DigestUpdate failed");
-            }
-        }
+    // We let curl write to its own stderr (where the progress meter
+    // and any error messages naturally go) and just check its exit
+    // code. std::system is sufficient — we don't need to capture
+    // stdout, and curl's exit codes are well documented.
+    const int status = std::system(cmd.c_str());
+    const int rc = normalize_status(status);
+    if (rc != 0) {
+        throw std::runtime_error(fmt::format(
+            "curl failed for {} (exit code {}). Is curl installed and on your PATH?", url, rc));
     }
-
-    std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
-    unsigned int digest_len = 0;
-    if (EVP_DigestFinal_ex(ctx, digest.data(), &digest_len) != 1) {
-        EVP_MD_CTX_free(ctx);
-        throw std::runtime_error("EVP_DigestFinal_ex failed");
-    }
-    EVP_MD_CTX_free(ctx);
-
-    static constexpr char kHex[] = "0123456789abcdef";
-    std::string out;
-    out.reserve(static_cast<std::size_t>(digest_len) * 2);
-    for (unsigned int i = 0; i < digest_len; ++i) {
-        out.push_back(kHex[(digest[i] >> 4) & 0x0F]);
-        out.push_back(kHex[digest[i] & 0x0F]);
-    }
-    return out;
 }
 
 }  // namespace
 
 void download_to_file(const DownloadOptions& opts) {
-    namespace fs = std::filesystem;
-
     if (opts.destination.empty()) {
         throw std::runtime_error("download_to_file: destination is empty");
+    }
+    if (opts.url.empty()) {
+        throw std::runtime_error("download_to_file: url is empty");
+    }
+    if (opts.url.rfind("https://", 0) != 0) {
+        throw std::runtime_error(
+            fmt::format("model downloader only supports https URLs; got '{}'", opts.url));
     }
 
     fs::create_directories(opts.destination.parent_path());
@@ -135,77 +103,34 @@ void download_to_file(const DownloadOptions& opts) {
     // Stream into a sibling .part file so a half-finished download
     // never appears at the destination path. We rename atomically on
     // success.
-    const auto tmp_path = opts.destination.string() + ".part";
+    const auto tmp_path = fs::path{opts.destination.string() + ".part"};
 
-    const ParsedUrl url = parse_url(opts.url);
-    if (url.scheme != "https") {
-        throw std::runtime_error(
-            fmt::format("model downloader only supports https URLs; got scheme '{}'", url.scheme));
+    const std::string user_agent = "vectra/" VECTRA_VERSION;
+
+    try {
+        run_curl(opts.url, tmp_path, user_agent);
+    } catch (...) {
+        std::error_code ec;
+        fs::remove(tmp_path, ec);
+        throw;
     }
 
-    std::ofstream out(tmp_path, std::ios::binary | std::ios::trunc);
-    if (!out) {
-        throw std::runtime_error(fmt::format("cannot open {} for writing", tmp_path));
-    }
-
-    httplib::SSLClient client(url.host, url.port == 0 ? 443 : url.port);
-    client.set_follow_location(true);
-    client.enable_server_certificate_verification(true);
-    client.set_read_timeout(120, 0);
-    client.set_connection_timeout(30, 0);
-    client.set_default_headers({{"User-Agent", "vectra/" VECTRA_VERSION}});
-
-    std::size_t downloaded = 0;
-    std::size_t total = opts.expected_size_bytes;
-
-    auto result = client.Get(
-        url.path,
-        // Response handler — pull Content-Length out of the headers
-        // before any chunks arrive so the progress display has a
-        // total to compare against.
-        [&](const httplib::Response& resp) {
-            const auto cl = resp.get_header_value("Content-Length");
-            if (!cl.empty()) {
-                try {
-                    total = static_cast<std::size_t>(std::stoull(cl));
-                } catch (...) {
-                    // Malformed header — just leave `total` as the
-                    // configured fallback.
-                }
-            }
-            return true;
-        },
-        // Content receiver — write each chunk to disk and tick the
-        // progress callback. Returning false aborts the transfer.
-        [&](const char* data, std::size_t length) {
-            out.write(data, static_cast<std::streamsize>(length));
-            if (!out) {
-                return false;
-            }
-            downloaded += length;
-            if (opts.on_progress) {
-                opts.on_progress(downloaded, total);
-            }
-            return true;
-        });
-
-    out.close();
-
-    if (!result) {
-        fs::remove(tmp_path);
-        throw std::runtime_error(fmt::format("download failed for {} (httplib error {})",
-                                             opts.url,
-                                             static_cast<int>(result.error())));
-    }
-    if (result->status < 200 || result->status >= 300) {
-        fs::remove(tmp_path);
-        throw std::runtime_error(fmt::format("HTTP {} downloading {}", result->status, opts.url));
+    if (opts.on_progress) {
+        // curl owns the progress display, but the public API still
+        // promises one final tick when the transfer is complete so
+        // callers can wrap up status lines, set indicators, etc.
+        std::error_code ec;
+        const auto size = fs::file_size(tmp_path, ec);
+        if (!ec) {
+            opts.on_progress(static_cast<std::size_t>(size), static_cast<std::size_t>(size));
+        }
     }
 
     if (!opts.expected_sha256.empty()) {
         const auto actual = sha256_file_hex(tmp_path);
         if (actual != opts.expected_sha256) {
-            fs::remove(tmp_path);
+            std::error_code ec;
+            fs::remove(tmp_path, ec);
             throw std::runtime_error(fmt::format("sha256 mismatch for {}: expected {} but got {}",
                                                  opts.url,
                                                  opts.expected_sha256,
@@ -225,7 +150,8 @@ void download_to_file(const DownloadOptions& opts) {
     if (ec) {
         std::error_code copy_ec;
         fs::copy_file(tmp_path, opts.destination, fs::copy_options::overwrite_existing, copy_ec);
-        fs::remove(tmp_path);
+        std::error_code rm_ec;
+        fs::remove(tmp_path, rm_ec);
         if (copy_ec) {
             throw std::runtime_error(
                 fmt::format("could not move downloaded file into place: {}", copy_ec.message()));
