@@ -58,10 +58,18 @@ if(MSVC)
         /W4
         /permissive-
         /Zc:__cplusplus
-        /Zc:preprocessor
         /utf-8
-        /MP
     )
+    # /Zc:preprocessor and /MP are accepted by cl.exe but rejected
+    # by clang-cl with -Werror=unused-command-line-argument. CMake's
+    # MSVC variable is true for both, so gate the real-MSVC-only
+    # flags by the actual compiler ID.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(vectra_compile_options INTERFACE
+            /Zc:preprocessor
+            /MP
+        )
+    endif()
     if(VECTRA_WARNINGS_AS_ERRORS)
         target_compile_options(vectra_compile_options INTERFACE /WX)
     endif()

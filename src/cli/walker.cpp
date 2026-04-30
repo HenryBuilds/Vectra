@@ -9,6 +9,8 @@
 
 namespace vectra::cli {
 
+FileWalker::FileWalker() noexcept : FileWalker(Options{}) {}
+
 FileWalker::FileWalker(Options opts) noexcept : opts_(std::move(opts)) {}
 
 std::vector<std::filesystem::path> FileWalker::walk(const std::filesystem::path& root,

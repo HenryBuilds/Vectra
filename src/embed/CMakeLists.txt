@@ -10,6 +10,21 @@
 # include <openssl/evp.h> without depending on the order of includes.
 find_package(OpenSSL CONFIG REQUIRED)
 
+# llama.cpp's public headers contain patterns that trip our strict
+# warning policy (struct/function name shadowing, old-style casts in
+# C-compat shims, etc.). Mark llama's and its transitive ggml deps'
+# interface include dirs as SYSTEM so GCC suppresses warnings from
+# upstream headers — same trick we already use for usearch.
+foreach(_llama_dep llama ggml ggml-base ggml-cpu)
+    if(TARGET ${_llama_dep})
+        get_target_property(_inc ${_llama_dep} INTERFACE_INCLUDE_DIRECTORIES)
+        if(_inc)
+            set_target_properties(${_llama_dep} PROPERTIES
+                INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_inc}")
+        endif()
+    endif()
+endforeach()
+
 add_library(vectra_embed STATIC
     embedder.cpp
     model_downloader.cpp

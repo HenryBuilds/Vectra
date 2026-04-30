@@ -47,7 +47,15 @@ public:
         bool follow_symlinks = false;
     };
 
-    explicit FileWalker(Options opts = Options{}) noexcept;
+    // Two overloads instead of `Options opts = Options{}`. Clang
+    // refuses the default-arg form because evaluating Options{}
+    // requires the in-class initializer for ignore_dirs (a brace-
+    // initialized unordered_set) to be visible at the point where
+    // the constructor signature is parsed — but the enclosing class
+    // is not complete yet there. Splitting the default into a
+    // separate constructor sidesteps the rule.
+    FileWalker() noexcept;
+    explicit FileWalker(Options opts) noexcept;
 
     // Walk `root` recursively and return the list of source-file
     // paths (absolute) whose extension is registered in `registry`
