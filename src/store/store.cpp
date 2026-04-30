@@ -612,10 +612,59 @@ std::optional<FileRecord> Store::get_file_record(std::string_view path) const {
 // Symbol search
 // ---------------------------------------------------------------------------
 
+namespace {
+
+// Sanitize a free-text query for FTS5 MATCH. FTS5 has its own
+// expression language with operators (AND/OR/NOT), prefix wildcards
+// (*), phrase quotes ("..."), grouping parentheses, and special
+// punctuation (+ - : ?). User prompts in natural language regularly
+// contain those — a question mark or an apostrophe trips a parser
+// error before any rows are scanned.
+//
+// Strategy: extract identifier-like runs (alphanumeric + underscore),
+// wrap each in double quotes (FTS5's literal-phrase syntax), and OR
+// them together. Token-free input returns the empty string, which
+// the caller treats as "skip the search" rather than handing FTS5
+// an invalid expression.
+[[nodiscard]] std::string sanitize_fts5_query(std::string_view raw) {
+    std::vector<std::string> tokens;
+    std::string cur;
+    for (char c : raw) {
+        const auto uc = static_cast<unsigned char>(c);
+        if (std::isalnum(uc) != 0 || c == '_') {
+            cur.push_back(c);
+        } else if (!cur.empty()) {
+            tokens.push_back(std::move(cur));
+            cur.clear();
+        }
+    }
+    if (!cur.empty()) {
+        tokens.push_back(std::move(cur));
+    }
+
+    std::string out;
+    for (std::size_t i = 0; i < tokens.size(); ++i) {
+        if (i > 0) {
+            out += " OR ";
+        }
+        out += '"';
+        out += tokens[i];
+        out += '"';
+    }
+    return out;
+}
+
+}  // namespace
+
 std::vector<SymbolHit> Store::search_symbols(std::string_view query, std::size_t limit) const {
+    const std::string match_expr = sanitize_fts5_query(query);
+    if (match_expr.empty()) {
+        return {};
+    }
+
     auto* s = impl_->stmt_symbol_search.get();
     detail::ResetGuard guard(s);
-    detail::bind_text(s, 1, query);
+    detail::bind_text(s, 1, match_expr);
     detail::bind_int64(s, 2, static_cast<std::int64_t>(limit));
 
     std::vector<SymbolHit> out;
