@@ -1,0 +1,101 @@
+{
+  "name": "vectra-vscode",
+  "displayName": "Vectra",
+  "description": "Local-first code RAG dispatch to Claude Code",
+  "version": "0.0.1",
+  "publisher": "vectra",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HenryBuilds/Vectra.git",
+    "directory": "extension/vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "vectra.ask",
+        "title": "Vectra: Ask about codebase",
+        "category": "Vectra"
+      },
+      {
+        "command": "vectra.askAboutSelection",
+        "title": "Vectra: Ask about selection",
+        "category": "Vectra"
+      },
+      {
+        "command": "vectra.index",
+        "title": "Vectra: Index workspace",
+        "category": "Vectra"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "vectra.askAboutSelection",
+          "when": "editorHasSelection",
+          "group": "1_modification@99"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Vectra",
+      "properties": {
+        "vectra.binary": {
+          "type": "string",
+          "default": "vectra",
+          "markdownDescription": "Path to the `vectra` binary. Defaults to `vectra` on PATH. Set this to an absolute path (e.g. `${userHome}/.local/bin/vectra`) if VS Code's environment does not see your shell PATH."
+        },
+        "vectra.claudeModel": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "haiku",
+            "sonnet",
+            "opus"
+          ],
+          "markdownDescription": "Override the Claude model `vectra ask` invokes. Empty = use whatever is in `.vectra/config.toml` or claude's default."
+        },
+        "vectra.effort": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "low",
+            "medium",
+            "high"
+          ],
+          "markdownDescription": "Thinking budget passed as `--effort`. Empty = use config / claude default."
+        },
+        "vectra.topK": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 50,
+          "markdownDescription": "Number of context chunks to surface per ask. 0 = use config / built-in default of 8."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.4.0"
+  }
+}
