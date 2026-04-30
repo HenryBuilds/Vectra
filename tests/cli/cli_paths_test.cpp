@@ -6,7 +6,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
-#include <fstream>
 #include <string>
 #include <string_view>
 
@@ -27,11 +26,6 @@ fs::path make_tmp_root(std::string_view label) {
                 (std::string{label} + "-" + session + "-" + std::to_string(counter.fetch_add(1)));
     fs::create_directories(root);
     return root;
-}
-
-void touch(const fs::path& p) {
-    fs::create_directories(p.parent_path());
-    std::ofstream{p, std::ios::binary | std::ios::trunc};
 }
 
 }  // namespace
