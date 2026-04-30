@@ -126,9 +126,25 @@ int run_claude(const ClaudeInvocation& inv, std::ostream& out) {
         throw std::runtime_error("run_claude: claude_binary is empty");
     }
 
-    // Build the shell command:
-    //   "<binary>" -p [extra args...] < "<prompt_file>"
-    std::string cmd = shell_quote(inv.claude_binary);
+    // Vectra's contract is "we wrap Claude Code, you keep using the
+    // auth you already set up via `claude login`". Claude Code,
+    // however, prefers an API key over OAuth as soon as one is
+    // present in the environment — and Cursor / Windsurf / various
+    // dev tools love to inject ANTHROPIC_API_KEY into their child
+    // shells. A stale or empty key then blocks the user's Pro/Max
+    // session with "Invalid API key". Clear the variable in the
+    // subprocess so claude falls through to its native OAuth path.
+    //
+    // Users who genuinely want API-key auth for `claude -p` should
+    // call claude directly; Vectra's wrapper exists to ride on the
+    // user's interactive login.
+    std::string cmd;
+#ifdef _WIN32
+    cmd += "set \"ANTHROPIC_API_KEY=\" && ";
+#else
+    cmd += "unset ANTHROPIC_API_KEY; ";
+#endif
+    cmd += shell_quote(inv.claude_binary);
     cmd += " -p";
     for (const auto& a : inv.extra_args) {
         cmd += ' ';
