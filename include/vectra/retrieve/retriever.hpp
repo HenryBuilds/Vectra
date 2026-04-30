@@ -13,7 +13,9 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -65,6 +67,15 @@ struct RetrieveOptions {
     // questions.
     double vector_weight = 1.0;
     double symbol_weight = 1.0;
+
+    // Optional progress callback invoked after each retrieval stage
+    // completes. `name` is a short human label (e.g. "symbol search",
+    // "embed query"); `count` is the stage's primary count metric
+    // (hits returned, candidates kept, ...) — 0 when not applicable.
+    // The duration covers only the named stage. Useful for surfacing
+    // a verbose pipeline view from the CLI.
+    std::function<void(std::string_view name, std::size_t count, std::chrono::milliseconds dur)>
+        on_stage;
 };
 
 class Retriever {

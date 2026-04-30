@@ -101,6 +101,8 @@ ProjectConfig load_project_config(const fs::path& repo_root) {
 
     if (const auto* claude = doc.get_as<toml::table>("claude")) {
         out.claude_binary = read_string(*claude, "claude", "binary");
+        out.claude_model = read_string(*claude, "claude", "model");
+        out.claude_effort = read_string(*claude, "claude", "effort");
         out.claude_extra_args = read_string_array(*claude, "claude", "extra_args");
     }
 

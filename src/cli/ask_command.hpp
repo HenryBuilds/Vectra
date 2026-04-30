@@ -61,14 +61,31 @@ struct AskOptions {
     // script). Defaults to "claude" on PATH.
     std::string claude_binary;
 
-    // Forwarded after `claude -p`. Useful for `--model claude-opus`,
-    // `--max-turns N`, `--allowedTools Edit,Bash`, etc.
+    // Forwarded after `claude -p` as `--model <name>`. Empty means
+    // "let claude pick its default model". Common values: "sonnet",
+    // "opus", "haiku", or a full model id like "claude-opus-4-5".
+    std::string claude_model;
+
+    // Forwarded as `--effort <value>` so callers can dial Claude's
+    // thinking budget without typing through --claude-arg. Same values
+    // claude accepts ("low" / "medium" / "high"). Empty means "leave
+    // claude on its default".
+    std::string claude_effort;
+
+    // Forwarded after the model/effort flags. Useful for anything the
+    // dedicated knobs don't cover: --max-turns N, --allowedTools, ...
     std::vector<std::string> claude_extra_args;
 
     // When true, print the composed prompt to stdout and exit
     // without spawning claude. Useful for inspecting the context
     // the retriever surfaced for a task.
     bool print_prompt = false;
+
+    // When true, suppress per-stage retrieval timing output on
+    // stderr. The default surfaces stage names + millisecond
+    // counts so the user can see where the wall-clock time is
+    // going (model load, embedding, RRF, rerank).
+    bool quiet = false;
 };
 
 [[nodiscard]] int run_ask(const AskOptions& opts);

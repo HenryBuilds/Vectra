@@ -166,12 +166,22 @@ int main(int argc, char** argv) {
     ask_cmd->add_option("--claude-bin",
                         ask_opts.claude_binary,
                         "Override the claude binary (default: PATH lookup)");
+    ask_cmd->add_option("--claude-model",
+                        ask_opts.claude_model,
+                        "Claude model passed as `--model` to `claude -p` "
+                        "(e.g. sonnet, opus, claude-opus-4-5)");
+    ask_cmd->add_option("--effort",
+                        ask_opts.claude_effort,
+                        "Thinking budget passed as `--effort` to `claude -p` "
+                        "(low / medium / high)");
     ask_cmd->add_option("--claude-arg",
                         ask_opts.claude_extra_args,
                         "Extra flag passed through to `claude -p` (repeatable)");
     ask_cmd->add_flag("--print-prompt",
                       ask_opts.print_prompt,
                       "Print the composed prompt and exit (no claude spawn)");
+    ask_cmd->add_flag(
+        "--quiet", ask_opts.quiet, "Suppress per-stage retrieval timing output on stderr");
     ask_cmd->callback([&] {
         try {
             exit_code = vectra::cli::run_ask(ask_opts);

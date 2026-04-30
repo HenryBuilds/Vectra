@@ -4,11 +4,13 @@
 
 #include <fmt/format.h>
 
+#include <chrono>
 #include <exception>
 #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 #include <system_error>
 
 #include "vectra/core/chunk.hpp"
@@ -122,6 +124,12 @@ int run_ask(const AskOptions& opts) {
     if (resolved.claude_binary.empty()) {
         resolved.claude_binary = project_cfg.claude_binary;
     }
+    if (resolved.claude_model.empty()) {
+        resolved.claude_model = project_cfg.claude_model;
+    }
+    if (resolved.claude_effort.empty()) {
+        resolved.claude_effort = project_cfg.claude_effort;
+    }
     if (resolved.claude_extra_args.empty()) {
         resolved.claude_extra_args = project_cfg.claude_extra_args;
     }
@@ -207,7 +215,25 @@ int run_ask(const AskOptions& opts) {
     // ---- retrieve ----------------------------------------------------
     retrieve::RetrieveOptions r_opts;
     r_opts.k = resolved.k;
+    if (!resolved.quiet) {
+        // Per-stage timing surfaces where wall-clock time goes
+        // (model load happens before this, but everything inside
+        // the retriever is covered).
+        r_opts.on_stage =
+            [](std::string_view name, std::size_t count, std::chrono::milliseconds dur) {
+                fmt::print(stderr,
+                           "  [{:>5} ms] {:<25} ({} {})\n",
+                           dur.count(),
+                           name,
+                           count,
+                           count == 1 ? "item" : "items");
+            };
+        fmt::print(stderr, "retrieval pipeline:\n");
+    }
+    const auto retrieve_start = std::chrono::steady_clock::now();
     const auto hits = retriever.retrieve(task, r_opts);
+    const auto retrieve_total = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - retrieve_start);
 
     PromptComposition comp;
     comp.task = task;
@@ -217,9 +243,10 @@ int run_ask(const AskOptions& opts) {
     }
 
     fmt::print(stderr,
-               "context: {} chunk{} retrieved\n",
+               "context: {} chunk{} retrieved [total {} ms]\n",
                comp.context.size(),
-               comp.context.size() == 1 ? "" : "s");
+               comp.context.size() == 1 ? "" : "s",
+               retrieve_total.count());
 
     const auto prompt = compose_prompt(comp);
 
@@ -239,7 +266,19 @@ int run_ask(const AskOptions& opts) {
     if (!resolved.claude_binary.empty()) {
         inv.claude_binary = resolved.claude_binary;
     }
-    inv.extra_args = resolved.claude_extra_args;
+    // Order: model + effort first (so users can override via
+    // claude_extra_args if they really want to), then the rest.
+    if (!resolved.claude_model.empty()) {
+        inv.extra_args.push_back("--model");
+        inv.extra_args.push_back(resolved.claude_model);
+    }
+    if (!resolved.claude_effort.empty()) {
+        inv.extra_args.push_back("--effort");
+        inv.extra_args.push_back(resolved.claude_effort);
+    }
+    for (const auto& a : resolved.claude_extra_args) {
+        inv.extra_args.push_back(a);
+    }
 
     const int rc = run_claude(inv, std::cout);
     if (rc < 0) {

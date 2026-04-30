@@ -37,6 +37,8 @@ struct ProjectConfig {
 
     // [claude]
     std::string claude_binary;
+    std::string claude_model;
+    std::string claude_effort;
     std::vector<std::string> claude_extra_args;
 };
 
