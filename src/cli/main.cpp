@@ -16,6 +16,16 @@
 #include <string_view>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include "ask_command.hpp"
 #include "index_command.hpp"
 #include "search_command.hpp"
@@ -35,6 +45,15 @@ namespace {
 }  // namespace
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    // Make Windows consoles render UTF-8 correctly. Claude Code (and
+    // our own diagnostics) emit UTF-8; without this, em-dashes and
+    // smart quotes show up as CP-850/CP-1252 mojibake (e.g. "ÔÇö"
+    // for "—"). Lifetime is the console window, so subsequent
+    // commands in the same cmd session also benefit.
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+
     // Bare-task shortcut. `vectra "<task>"` (or `vectra fix the bug`)
     // is rewritten to `vectra ask <task>` so users do not have to
     // type the verb for the common case. The rewrite happens before
