@@ -197,6 +197,11 @@ int main(int argc, char** argv) {
     ask_cmd->add_flag("--print-prompt",
                       ask_opts.print_prompt,
                       "Print the composed prompt and exit (no claude spawn)");
+    ask_cmd->add_flag("--stream-json",
+                      ask_opts.stream_json,
+                      "Emit claude's response as newline-delimited JSON events "
+                      "(partial messages, tool_use, tool_result, usage). For UI "
+                      "clients; humans want the default text output.");
     ask_cmd->add_flag(
         "--quiet", ask_opts.quiet, "Suppress per-stage retrieval timing output on stderr");
     ask_cmd->callback([&] {

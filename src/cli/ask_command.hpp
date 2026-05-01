@@ -99,6 +99,17 @@ struct AskOptions {
     // counts so the user can see where the wall-clock time is
     // going (model load, embedding, RRF, rerank).
     bool quiet = false;
+
+    // When true, append --output-format=stream-json plus the flags
+    // it requires (--include-partial-messages, --verbose) to
+    // claude's invocation. claude then emits newline-delimited
+    // JSON events on stdout instead of plain text — partial-message
+    // deltas, tool_use blocks, tool_result blocks, and a final
+    // result with token counts and cost. The VS Code extension
+    // turns those events into tool-use indicators, streamed
+    // assistant text, and per-turn usage stats. Default off so
+    // terminal users keep seeing readable output.
+    bool stream_json = false;
 };
 
 [[nodiscard]] int run_ask(const AskOptions& opts);
