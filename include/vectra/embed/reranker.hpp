@@ -50,8 +50,10 @@ struct RerankerConfig {
 
     // Number of layers to offload to the GPU. 0 = CPU, -1 = all on
     // GPU. The actual GPU backend is decided at compile time via the
-    // VECTRA_GPU_* options.
-    int n_gpu_layers = 0;
+    // VECTRA_GPU_* options. Default is -1 — CPU-only builds silently
+    // cap this at 0 inside llama.cpp, so the GPU-aware default is
+    // safe in both build modes.
+    int n_gpu_layers = -1;
 
     // Instruction supplied to the model. Default matches the
     // documented Qwen3-Reranker prompt for code search.

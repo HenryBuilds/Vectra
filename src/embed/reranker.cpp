@@ -37,6 +37,9 @@ namespace {
 void ensure_backend_initialized() {
     static std::once_flag flag;
     std::call_once(flag, [] {
+        // See embedder.cpp for why we need ggml_backend_load_all
+        // before llama_backend_init (dynamic backend DLL discovery).
+        ggml_backend_load_all();
         llama_backend_init();
         llama_log_set([](enum ggml_log_level, const char*, void*) {}, nullptr);
     });

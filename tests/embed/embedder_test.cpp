@@ -34,5 +34,8 @@ TEST_CASE("EmbedderConfig defaults carry the documented instruct prefix", "[embe
     // semantics has to also update this assertion.
     REQUIRE(cfg.query_instruction.find("retrieve") != std::string::npos);
     REQUIRE(cfg.n_ctx == 2048);
-    REQUIRE(cfg.n_gpu_layers == 0);
+    // -1 = "use whatever GPU the build has." llama.cpp silently caps
+    // at 0 on CPU-only builds, so this default is safe regardless of
+    // VECTRA_GPU_*. See architecture.md.
+    REQUIRE(cfg.n_gpu_layers == -1);
 }

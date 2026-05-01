@@ -57,7 +57,13 @@ struct EmbedderConfig {
     // CPU; -1 offloads as many layers as fit. The actual GPU backend
     // (CUDA / Metal / Vulkan / HIP) is decided at compile time via
     // the VECTRA_GPU_* options in the top-level CMakeLists.
-    int n_gpu_layers = 0;
+    //
+    // Default is -1 ("use whatever GPU the build has") because a
+    // CPU-only build silently caps this at 0 inside llama.cpp, so the
+    // GPU-aware default is safe across build modes and saves callers
+    // from having to know whether they're on a CUDA / Metal / Vulkan
+    // binary.
+    int n_gpu_layers = -1;
 
     // Instruction prefix prepended to every query. The default
     // matches Qwen3-Embedding's documented format. Override only if

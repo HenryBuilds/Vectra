@@ -34,6 +34,7 @@ TEST_CASE("Reranker::open rejects a path that is a directory", "[reranker]") {
 TEST_CASE("RerankerConfig defaults pin the documented instruction", "[reranker]") {
     const RerankerConfig cfg{};
     REQUIRE(cfg.n_ctx == 4096);
-    REQUIRE(cfg.n_gpu_layers == 0);
+    // See embedder_test for why the default is -1.
+    REQUIRE(cfg.n_gpu_layers == -1);
     REQUIRE_FALSE(cfg.instruct.empty());
 }
