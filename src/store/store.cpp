@@ -512,8 +512,7 @@ void Store::put_embedding(std::string_view chunk_hash,
     impl_->vectors->upsert(static_cast<std::uint64_t>(chunk_id), vector);
 }
 
-void Store::put_embeddings(std::string_view model_id,
-                           std::span<const EmbeddingPut> embeddings) {
+void Store::put_embeddings(std::string_view model_id, std::span<const EmbeddingPut> embeddings) {
     if (embeddings.empty()) {
         return;
     }

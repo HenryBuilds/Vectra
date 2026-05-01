@@ -156,8 +156,7 @@ void print_summary(const Stats& s, std::chrono::milliseconds dur) {
     }
     const auto* entry = embed::ModelRegistry::by_name(name);
     if (entry == nullptr) {
-        throw std::runtime_error(
-            fmt::format("unknown model '{}'. Try `vectra model list`.", name));
+        throw std::runtime_error(fmt::format("unknown model '{}'. Try `vectra model list`.", name));
     }
     const auto model_path = embed::ModelRegistry::local_path(*entry);
     std::error_code ec;
@@ -182,14 +181,16 @@ void print_summary(const Stats& s, std::chrono::milliseconds dur) {
 //
 // Either way, chunks_missing_embedding(model_id) gives us the exact
 // set, so we never re-embed work that's already on disk.
-[[nodiscard]] std::pair<std::size_t, std::int64_t> backfill_embeddings(
-    store::Store& store, embed::Embedder& embedder, bool quiet) {
+[[nodiscard]] std::pair<std::size_t, std::int64_t> backfill_embeddings(store::Store& store,
+                                                                       embed::Embedder& embedder,
+                                                                       bool quiet) {
     const auto missing = store.chunks_missing_embedding(embedder.model_id());
     if (missing.empty()) {
         return {0, 0};
     }
 
-    fmt::print(stderr, "\nembedding {} chunk{} with {}...\n",
+    fmt::print(stderr,
+               "\nembedding {} chunk{} with {}...\n",
                missing.size(),
                missing.size() == 1 ? "" : "s",
                embedder.model_id());
@@ -229,10 +230,8 @@ void print_summary(const Stats& s, std::chrono::milliseconds dur) {
 
         const auto vectors = embedder.embed_documents(views);
         if (vectors.size() != hashes.size()) {
-            throw std::runtime_error(
-                fmt::format("embedder returned {} vectors for {} inputs",
-                            vectors.size(),
-                            hashes.size()));
+            throw std::runtime_error(fmt::format(
+                "embedder returned {} vectors for {} inputs", vectors.size(), hashes.size()));
         }
 
         // Stage the batch as parallel views into our owning storage,

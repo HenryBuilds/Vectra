@@ -108,13 +108,12 @@ void emit_context_event(const std::vector<ContextChunk>& chunks) {
             fmt::print(",");
         }
         const auto& c = chunks[i];
-        fmt::print(
-            R"({{"file":"{}","start_line":{},"end_line":{},"symbol":"{}","kind":"{}"}})",
-            json_escape(c.file_path),
-            c.start_line,
-            c.end_line,
-            json_escape(c.symbol),
-            json_escape(c.kind));
+        fmt::print(R"({{"file":"{}","start_line":{},"end_line":{},"symbol":"{}","kind":"{}"}})",
+                   json_escape(c.file_path),
+                   c.start_line,
+                   c.end_line,
+                   json_escape(c.symbol),
+                   json_escape(c.kind));
     }
     fmt::print("]}}\n");
     std::fflush(stdout);

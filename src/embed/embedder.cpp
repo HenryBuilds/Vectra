@@ -376,8 +376,7 @@ std::vector<std::vector<float>> Embedder::embed_documents(
         const int32_t rc = llama_decode(impl_->ctx, batch);
         if (rc != 0) {
             llama_batch_free(batch);
-            throw std::runtime_error(
-                fmt::format("llama_decode (batched) returned {}", rc));
+            throw std::runtime_error(fmt::format("llama_decode (batched) returned {}", rc));
         }
 
         for (int32_t s = 0; s < n_seqs; ++s) {
