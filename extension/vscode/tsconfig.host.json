@@ -12,6 +12,6 @@
     "noUnusedParameters": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "out", ".vscode-test"]
+  "include": ["src/extension.ts", "src/chatProvider.ts"],
+  "exclude": ["node_modules", "out", ".vscode-test", "src/webview"]
 }

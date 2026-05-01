@@ -7,3 +7,6 @@ src/**
 **/*.ts
 node_modules/**
 .eslintrc*
+
+# Keep these — referenced from the webview / activity bar:
+!media/**

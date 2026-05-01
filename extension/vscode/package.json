@@ -2,7 +2,7 @@
   "name": "vectra-vscode",
   "displayName": "Vectra",
   "description": "Local-first code RAG dispatch to Claude Code",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "publisher": "vectra",
   "license": "Apache-2.0",
   "repository": {
@@ -11,7 +11,7 @@
     "directory": "extension/vscode"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.94.0"
   },
   "categories": [
     "AI",
@@ -35,6 +35,21 @@
         "command": "vectra.index",
         "title": "Vectra: Index workspace",
         "category": "Vectra"
+      },
+      {
+        "command": "vectra.newChat",
+        "title": "New chat",
+        "category": "Vectra",
+        "icon": "$(add)"
+      },
+      {
+        "command": "vectra.openChat",
+        "title": "Vectra: Open chat",
+        "category": "Vectra",
+        "icon": {
+          "light": "media/icon.svg",
+          "dark": "media/icon.svg"
+        }
       }
     ],
     "menus": {
@@ -43,6 +58,18 @@
           "command": "vectra.askAboutSelection",
           "when": "editorHasSelection",
           "group": "1_modification@99"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "vectra.openChat",
+          "when": "!activeWebviewPanelId || activeWebviewPanelId != 'vectra.chat'",
+          "group": "navigation@100"
+        },
+        {
+          "command": "vectra.newChat",
+          "when": "activeWebviewPanelId == 'vectra.chat'",
+          "group": "navigation@1"
         }
       ]
     },
@@ -88,14 +115,26 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "npm run build:host && npm run build:webview",
+    "build:host": "tsc -p tsconfig.host.json",
+    "build:webview": "esbuild src/webview/index.tsx --bundle --minify --format=iife --target=es2022 --outfile=out/webview.js --jsx=automatic --platform=browser --loader:.css=text",
+    "watch": "concurrently \"npm:watch:host\" \"npm:watch:webview\"",
+    "watch:host": "tsc -watch -p tsconfig.host.json",
+    "watch:webview": "esbuild src/webview/index.tsx --bundle --watch --sourcemap --format=iife --target=es2022 --outfile=out/webview.js --jsx=automatic --platform=browser",
     "package": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@types/vscode": "^1.85.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/vscode": "^1.94.0",
     "@vscode/vsce": "^3.2.0",
+    "concurrently": "^9.0.0",
+    "esbuild": "^0.24.0",
     "typescript": "^5.4.0"
   }
 }

@@ -15,6 +15,8 @@
 import * as cp from 'child_process';
 import * as vscode from 'vscode';
 
+import { VectraChatPanel } from './chatProvider';
+
 const OUTPUT_CHANNEL_NAME = 'Vectra';
 
 interface AskFlags {
@@ -198,6 +200,10 @@ export function activate(context: vscode.ExtensionContext): void {
             commandAskAboutSelection(output),
         ),
         vscode.commands.registerCommand('vectra.index', () => commandIndex(output)),
+        vscode.commands.registerCommand('vectra.newChat', () => VectraChatPanel.newChat()),
+        vscode.commands.registerCommand('vectra.openChat', () => {
+            VectraChatPanel.createOrShow(context.extensionUri);
+        }),
     );
 }
 
