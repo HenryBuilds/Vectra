@@ -16,6 +16,11 @@
 #include "vectra/core/language.hpp"
 #include "vectra/store/store.hpp"
 
+#if VECTRA_HAS_EMBED
+#include "vectra/embed/embedder.hpp"
+#include "vectra/embed/model_registry.hpp"
+#endif
+
 #include "cli_paths.hpp"
 #include "walker.hpp"
 
@@ -101,6 +106,8 @@ struct Stats {
     std::size_t files_unchanged = 0;
     std::size_t files_errored = 0;
     std::size_t chunks_added = 0;
+    std::size_t chunks_embedded = 0;
+    std::int64_t embed_time_ms = 0;
 };
 
 void print_progress(std::size_t n,
@@ -126,8 +133,130 @@ void print_summary(const Stats& s, std::chrono::milliseconds dur) {
     fmt::print("  files unchanged: {}\n", s.files_unchanged);
     fmt::print("  files errored:   {}\n", s.files_errored);
     fmt::print("  chunks added:    {}\n", s.chunks_added);
+    if (s.chunks_embedded > 0) {
+        const double embed_seconds = static_cast<double>(s.embed_time_ms) / 1000.0;
+        const double embed_rate =
+            embed_seconds > 0.0 ? static_cast<double>(s.chunks_embedded) / embed_seconds : 0.0;
+        fmt::print("  chunks embedded: {} ({:.2f}s, {:.0f} chunks/s)\n",
+                   s.chunks_embedded,
+                   embed_seconds,
+                   embed_rate);
+    }
     fmt::print("  time:            {:.2f}s ({:.0f} files/s)\n", seconds, rate);
 }
+
+#if VECTRA_HAS_EMBED
+// Load and prepare an embedder from a registry name. Returns nullptr
+// for an empty name (symbol-only indexing); throws on misconfiguration
+// (unknown name, model not cached) so the caller can bail before
+// chunking starts.
+[[nodiscard]] std::unique_ptr<embed::Embedder> open_embedder(const std::string& name) {
+    if (name.empty()) {
+        return nullptr;
+    }
+    const auto* entry = embed::ModelRegistry::by_name(name);
+    if (entry == nullptr) {
+        throw std::runtime_error(
+            fmt::format("unknown model '{}'. Try `vectra model list`.", name));
+    }
+    const auto model_path = embed::ModelRegistry::local_path(*entry);
+    std::error_code ec;
+    if (!std::filesystem::exists(model_path, ec)) {
+        throw std::runtime_error(
+            fmt::format("model not cached. Run `vectra model pull {}` first.", name));
+    }
+    embed::EmbedderConfig cfg;
+    cfg.model_path = model_path;
+    cfg.model_id = entry->name;
+    return std::make_unique<embed::Embedder>(embed::Embedder::open(cfg));
+}
+
+// Embed every chunk that has no vector for `embedder.model_id()` and
+// persist via store.put_embedding. Returns (count, wall-clock ms).
+//
+// Runs after the file-walk pass so the call covers two cases at once:
+//   1. First-time embedding on an existing symbol-only index — every
+//      chunk is missing.
+//   2. Incremental: the just-indexed files added new chunks, the
+//      rest already have vectors from a prior --model run.
+//
+// Either way, chunks_missing_embedding(model_id) gives us the exact
+// set, so we never re-embed work that's already on disk.
+[[nodiscard]] std::pair<std::size_t, std::int64_t> backfill_embeddings(
+    store::Store& store, embed::Embedder& embedder, bool quiet) {
+    const auto missing = store.chunks_missing_embedding(embedder.model_id());
+    if (missing.empty()) {
+        return {0, 0};
+    }
+
+    fmt::print(stderr, "\nembedding {} chunk{} with {}...\n",
+               missing.size(),
+               missing.size() == 1 ? "" : "s",
+               embedder.model_id());
+
+    // Batch size matters: too small wastes the model-launch overhead,
+    // too large blows tensor memory on bigger models. 32 is a safe
+    // middle ground for the Qwen3-Embedding family. Larger inputs are
+    // bottlenecked by tokenization anyway.
+    constexpr std::size_t kBatchSize = 32;
+    std::size_t embedded = 0;
+    const auto t0 = std::chrono::steady_clock::now();
+
+    for (std::size_t i = 0; i < missing.size(); i += kBatchSize) {
+        const std::size_t end = std::min(i + kBatchSize, missing.size());
+
+        // Fetch chunk texts in batch order. We hold the std::strings
+        // alive in `texts` so the string_views passed to embed_documents
+        // remain valid for the duration of the call.
+        std::vector<std::string> texts;
+        std::vector<std::string_view> views;
+        std::vector<std::string> hashes;
+        texts.reserve(end - i);
+        views.reserve(end - i);
+        hashes.reserve(end - i);
+        for (std::size_t j = i; j < end; ++j) {
+            auto chunk = store.get_chunk(missing[j]);
+            if (!chunk) {
+                // Lost a race with a delete? Skip and keep going.
+                continue;
+            }
+            texts.push_back(std::move(chunk->text));
+            hashes.push_back(missing[j]);
+        }
+        for (const auto& t : texts) {
+            views.emplace_back(t);
+        }
+
+        const auto vectors = embedder.embed_documents(views);
+        if (vectors.size() != hashes.size()) {
+            throw std::runtime_error(
+                fmt::format("embedder returned {} vectors for {} inputs",
+                            vectors.size(),
+                            hashes.size()));
+        }
+
+        // Stage the batch as parallel views into our owning storage,
+        // then upsert with one transaction. Doing this per-row would
+        // cost an fsync per chunk — minutes of cumulative I/O on a
+        // 10k-chunk repo.
+        std::vector<store::Store::EmbeddingPut> puts;
+        puts.reserve(vectors.size());
+        for (std::size_t j = 0; j < vectors.size(); ++j) {
+            puts.push_back({hashes[j], vectors[j]});
+        }
+        store.put_embeddings(embedder.model_id(), puts);
+        embedded += puts.size();
+
+        if (!quiet) {
+            fmt::print(stderr, "  embedded {}/{}\n", embedded, missing.size());
+        }
+    }
+
+    const auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - t0);
+    return {embedded, dur.count()};
+}
+#endif  // VECTRA_HAS_EMBED
 
 }  // namespace
 
@@ -146,7 +275,33 @@ int run_index(const IndexOptions& opts) {
     const fs::path db_path = opts.db.empty() ? opts.root / ".vectra" / "index.db" : opts.db;
     fs::create_directories(db_path.parent_path());
     auto store = store::Store::open(db_path);
-    fmt::print(stderr, "database:  {}\n\n", db_path.string());
+    fmt::print(stderr, "database:  {}\n", db_path.string());
+
+#if VECTRA_HAS_EMBED
+    // Load the embedder up front (before walking files) so a missing
+    // model file fails fast instead of after we've already chewed
+    // through the codebase. nullptr = symbol-only indexing.
+    std::unique_ptr<embed::Embedder> embedder;
+    try {
+        embedder = open_embedder(opts.model);
+    } catch (const std::exception& e) {
+        fmt::print(stderr, "error: {}\n", e.what());
+        return 2;
+    }
+    if (embedder) {
+        fmt::print(stderr, "embedder:  {} (dim {})\n", embedder->model_id(), embedder->dim());
+    } else {
+        fmt::print(stderr, "embedder:  (none — symbol-only index)\n");
+    }
+#else
+    if (!opts.model.empty()) {
+        fmt::print(stderr,
+                   "error: this build was produced with VECTRA_BUILD_EMBED=OFF; "
+                   "the --model flag is unavailable.\n");
+        return 2;
+    }
+#endif
+    fmt::print(stderr, "\n");
 
     const FileWalker walker;
     const auto files = walker.walk(opts.root, registry);
@@ -220,6 +375,29 @@ int run_index(const IndexOptions& opts) {
             print_progress(i + 1, files.size(), rel, chunks.size(), "indexed");
         }
     }
+
+#if VECTRA_HAS_EMBED
+    // Backfill any chunks that lack a vector for the active model.
+    // Runs after the file-walk pass — this single call covers both
+    // "first-time embedding on a previously symbol-only index" and
+    // "incrementally embed only the new chunks from this run."
+    if (embedder) {
+        try {
+            const auto [count, ms] = backfill_embeddings(store, *embedder, opts.quiet);
+            stats.chunks_embedded = count;
+            stats.embed_time_ms = ms;
+        } catch (const std::exception& e) {
+            fmt::print(stderr, "\nerror: embedding pass failed: {}\n", e.what());
+            // Files were chunked successfully; return non-zero so the
+            // caller knows the index is now in a half-embedded state
+            // (chunks present, some vectors missing).
+            print_summary(stats,
+                          std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now() - t0));
+            return 1;
+        }
+    }
+#endif
 
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - t0);

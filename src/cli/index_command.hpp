@@ -23,6 +23,18 @@ struct IndexOptions {
     // resolved by walking up from the current working directory.
     std::filesystem::path resources;
 
+    // Embedding-model registry name. Empty means "skip embedding —
+    // build a symbol-only index". When set, the indexer loads the
+    // model after the chunking pass and embeds every chunk that
+    // does not already have a vector for this model_id, persisting
+    // them via Store::put_embedding. This is the path that turns a
+    // freshly-walked index into a hybrid (FTS5 + vector) one.
+    //
+    // Mixing two embedding models in a single index is not
+    // supported; if you swap models, delete .vectra/index.db and
+    // re-index from scratch.
+    std::string model;
+
     // Suppress per-file output; print only the final summary.
     bool quiet = false;
 };

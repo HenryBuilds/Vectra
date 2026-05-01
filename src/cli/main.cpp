@@ -99,6 +99,11 @@ int main(int argc, char** argv) {
         "--db", index_opts.db, "Database file (default: <path>/.vectra/index.db)");
     index_cmd->add_option(
         "--resources", index_opts.resources, "Directory containing languages.toml and queries/");
+    index_cmd->add_option(
+        "--model",
+        index_opts.model,
+        "Embedding model name (e.g. qwen3-embed-0.6b). Skip for a symbol-only "
+        "index. Run `vectra model list` for available models.");
     index_cmd->add_flag("-q,--quiet", index_opts.quiet, "Suppress per-file output");
 
     int exit_code = 0;
