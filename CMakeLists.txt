@@ -259,9 +259,18 @@ if(VECTRA_BUILD_EMBED)
         mtmd)
         if(TARGET ${_llama_target})
             if(MSVC)
-                target_compile_options(${_llama_target} PRIVATE /Zc:char8_t-)
+                # Scope to CXX only. nvcc forwards target compile
+                # options through `-Xcompiler` and the multi-flag form
+                # without quoting confuses its argument parser
+                # ("nvcc fatal: A single input file is required ...").
+                # CUDA host flags are managed separately by llama.cpp's
+                # own ggml-cuda CMakeLists, so leaking ours into the
+                # .cu compile calls is wrong anyway.
+                target_compile_options(${_llama_target} PRIVATE
+                    $<$<COMPILE_LANGUAGE:CXX>:/Zc:char8_t->)
             else()
-                target_compile_options(${_llama_target} PRIVATE -fno-char8_t)
+                target_compile_options(${_llama_target} PRIVATE
+                    $<$<COMPILE_LANGUAGE:CXX>:-fno-char8_t>)
             endif()
         endif()
     endforeach()
