@@ -512,6 +512,62 @@ void Store::put_embedding(std::string_view chunk_hash,
     impl_->vectors->upsert(static_cast<std::uint64_t>(chunk_id), vector);
 }
 
+void Store::put_embeddings(std::string_view model_id,
+                           std::span<const EmbeddingPut> embeddings) {
+    if (embeddings.empty()) {
+        return;
+    }
+
+    const auto dim = embeddings.front().vector.size();
+    if (dim == 0) {
+        throw std::runtime_error("put_embeddings: vector is empty");
+    }
+
+    // Lazy-create the in-memory vector index, sized for the whole
+    // batch up front (saves a few HNSW grow-and-rehash cycles when
+    // we're backfilling thousands of chunks at once).
+    if (!impl_->vectors) {
+        impl_->vectors = std::make_unique<detail::VectorIndex>(static_cast<std::uint32_t>(dim));
+        impl_->vectors->reserve(embeddings.size() * 2);
+    } else if (impl_->vectors->dim() != dim) {
+        throw std::runtime_error(
+            fmt::format("put_embeddings: vector dim {} does not match index dim {}; "
+                        "an embedding model swap requires a fresh index",
+                        dim,
+                        impl_->vectors->dim()));
+    }
+
+    const std::int64_t now = now_seconds();
+
+    detail::in_transaction(impl_->db.get(), [&] {
+        for (const auto& e : embeddings) {
+            if (e.vector.size() != dim) {
+                throw std::runtime_error(
+                    fmt::format("put_embeddings: heterogeneous dims in batch ({} vs {})",
+                                e.vector.size(),
+                                dim));
+            }
+            const std::int64_t chunk_id = lookup_chunk_id(*impl_, e.chunk_hash);
+            const auto bytes = floats_to_bytes(e.vector);
+
+            auto* s = impl_->stmt_embedding_upsert.get();
+            detail::ResetGuard guard(s);
+            detail::bind_int64(s, 1, chunk_id);
+            detail::bind_text(s, 2, model_id);
+            detail::bind_int(s, 3, static_cast<int>(e.vector.size()));
+            detail::bind_blob(s, 4, bytes);
+            detail::bind_int64(s, 5, now);
+            const int rc = sqlite3_step(s);
+            detail::check(impl_->db.get(), rc, "upsert embedding (bulk)");
+
+            // HNSW upsert inside the transaction is fine — usearch
+            // is in-memory and our transaction already serializes
+            // SQLite writes.
+            impl_->vectors->upsert(static_cast<std::uint64_t>(chunk_id), e.vector);
+        }
+    });
+}
+
 std::optional<std::vector<float>> Store::get_embedding(std::string_view chunk_hash) const {
     auto* s = impl_->stmt_embedding_get.get();
     detail::ResetGuard guard(s);

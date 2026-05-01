@@ -107,6 +107,17 @@ public:
                        std::string_view model_id,
                        std::span<const float> vector);
 
+    // Bulk variant. One SQLite transaction wraps the whole batch,
+    // turning N fsync-bound commits into a single one — the
+    // difference is ~10ms per row on Windows, so re-embedding a
+    // 10k-chunk repo via N calls to put_embedding would spend
+    // minutes inside fsync that this API folds into a single sync.
+    struct EmbeddingPut {
+        std::string_view chunk_hash;
+        std::span<const float> vector;
+    };
+    void put_embeddings(std::string_view model_id, std::span<const EmbeddingPut> embeddings);
+
     // Retrieve a stored embedding. Returns nullopt if none exists.
     [[nodiscard]] std::optional<std::vector<float>> get_embedding(
         std::string_view chunk_hash) const;
