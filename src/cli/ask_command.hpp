@@ -76,6 +76,19 @@ struct AskOptions {
     // dedicated knobs don't cover: --max-turns N, --allowedTools, ...
     std::vector<std::string> claude_extra_args;
 
+    // Conversation continuity. When non-empty, forwarded to
+    // `claude -p` so multi-turn callers (the VS Code chat panel)
+    // get a single Claude session instead of N disconnected one-shots.
+    //   --session-id <uuid>  → claude --session-id <uuid>
+    //                          (assigns a UUID; first turn of a chat)
+    //   --resume <uuid>      → claude --resume <uuid>
+    //                          (continues an existing session; follow-up turns)
+    // The two are mutually exclusive at parse time. Format: any
+    // string claude accepts (it requires a valid UUID for
+    // --session-id; we don't second-guess that here).
+    std::string session_id;
+    std::string resume_session;
+
     // When true, print the composed prompt to stdout and exit
     // without spawning claude. Useful for inspecting the context
     // the retriever surfaced for a task.

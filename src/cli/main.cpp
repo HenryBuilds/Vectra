@@ -177,6 +177,18 @@ int main(int argc, char** argv) {
     ask_cmd->add_option("--claude-arg",
                         ask_opts.claude_extra_args,
                         "Extra flag passed through to `claude -p` (repeatable)");
+    auto* session_id_opt =
+        ask_cmd->add_option("--session-id",
+                            ask_opts.session_id,
+                            "UUID forwarded as `claude -p --session-id <uuid>`. "
+                            "Use for the first turn of a multi-turn conversation.");
+    auto* resume_opt =
+        ask_cmd->add_option("--resume",
+                            ask_opts.resume_session,
+                            "UUID forwarded as `claude -p --resume <uuid>` to continue "
+                            "an existing claude session. Use for follow-up turns.");
+    session_id_opt->excludes(resume_opt);
+    resume_opt->excludes(session_id_opt);
     ask_cmd->add_flag("--print-prompt",
                       ask_opts.print_prompt,
                       "Print the composed prompt and exit (no claude spawn)");

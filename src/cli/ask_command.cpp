@@ -267,7 +267,8 @@ int run_ask(const AskOptions& opts) {
         inv.claude_binary = resolved.claude_binary;
     }
     // Order: model + effort first (so users can override via
-    // claude_extra_args if they really want to), then the rest.
+    // claude_extra_args if they really want to), then session
+    // continuity, then the rest.
     if (!resolved.claude_model.empty()) {
         inv.extra_args.push_back("--model");
         inv.extra_args.push_back(resolved.claude_model);
@@ -275,6 +276,15 @@ int run_ask(const AskOptions& opts) {
     if (!resolved.claude_effort.empty()) {
         inv.extra_args.push_back("--effort");
         inv.extra_args.push_back(resolved.claude_effort);
+    }
+    // Mutual exclusion is enforced at the CLI parse layer; we just
+    // forward whichever one the caller filled in.
+    if (!resolved.session_id.empty()) {
+        inv.extra_args.push_back("--session-id");
+        inv.extra_args.push_back(resolved.session_id);
+    } else if (!resolved.resume_session.empty()) {
+        inv.extra_args.push_back("--resume");
+        inv.extra_args.push_back(resolved.resume_session);
     }
     for (const auto& a : resolved.claude_extra_args) {
         inv.extra_args.push_back(a);
