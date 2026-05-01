@@ -35,6 +35,26 @@ public:
             "obj",    ".cache",  ".venv",   "venv",    "__pycache__",
             "vendor",  // Go modules vendor dir
             ".idea",  ".vscode", ".gradle", ".tox",
+            // JS/TS framework build output. Without these, a Next.js
+            // repo balloons the index with tens of thousands of
+            // chunks from minified bundles (.next/dev, .next/server,
+            // .next/static) that drown out the user's actual source
+            // in retrieval ranking.
+            ".next",        // Next.js
+            ".nuxt",        // Nuxt
+            ".turbo",       // Turborepo
+            ".svelte-kit",  // SvelteKit
+            ".astro",       // Astro
+            ".parcel-cache",
+            ".expo",        // Expo / React Native
+            ".angular",     // Angular CLI cache
+            // Python / test caches
+            ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+            // Test coverage reports
+            "coverage",
+            ".nyc_output",
         };
 
         // Files exceeding this size are skipped; very large source
