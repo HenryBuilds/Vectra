@@ -2,10 +2,26 @@
 //
 // Filesystem walker that yields source files for indexing.
 //
-// Walks a directory tree, prunes well-known build / VCS / cache
-// directories, drops files that are too large or unreadable, and
-// keeps only those whose extension is registered in the language
-// registry. Internal to vectra-cli.
+// Two-mode operation:
+//
+//   1. **Git mode** (preferred). When `root` lives inside a git
+//      working tree, the walker shells out to `git ls-files
+//      --cached --others --exclude-standard` and uses the result
+//      as the file set. This means project-specific .gitignore,
+//      multi-level .gitignore, .git/info/exclude, and the user's
+//      global gitignore are *all* honoured for free, with no
+//      pattern-parsing code on our side. Files git tracks plus
+//      untracked-but-not-ignored are kept; ignored and the .git
+//      directory itself drop out.
+//
+//   2. **Filesystem fallback**. If `git` is not on PATH, the root
+//      is not inside a repo, or the subprocess fails for any
+//      reason, the walker falls back to a recursive directory
+//      iterator with a small hardcoded skip list. This keeps
+//      vectra usable on directories that are not git repos.
+//
+// Either mode then filters by language registry (extension known)
+// and file size before returning. Internal to vectra-cli.
 
 #pragma once
 
@@ -24,37 +40,38 @@ namespace vectra::cli {
 class FileWalker {
 public:
     struct Options {
-        // Directory names that are skipped entirely. Matched on the
-        // last component (so "a/b/.git" is skipped, but a literal
-        // file called ".git" inside a tracked directory is not).
+        // Directory names that are skipped in the **filesystem
+        // fallback path** (no git available / not in a repo).
+        // Matched on the last component (so "a/b/.git" is skipped,
+        // but a literal file called ".git" inside a tracked
+        // directory is not).
+        //
+        // Kept deliberately small: framework-specific build outputs
+        // (.next, .turbo, .svelte-kit, …) are not in this list
+        // because (a) they are reliably in every modern project's
+        // .gitignore so the git path skips them automatically, and
+        // (b) maintaining a comprehensive list across an evolving
+        // ecosystem is its own treadmill. The entries here are the
+        // universal-skip set that should be ignored even if a
+        // user's .gitignore is broken or missing.
         std::unordered_set<std::string> ignore_dirs = {
-            ".git",   ".hg",     ".svn",    ".vectra", ".vectra-cache", "node_modules",
-            "target",  // Rust / Java
-            "build",  "out",     "dist",
-            "bin",  // common output dir; revisit if it causes false negatives
-            "obj",    ".cache",  ".venv",   "venv",    "__pycache__",
+            // VCS metadata
+            ".git",
+            ".hg",
+            ".svn",
+            // Vectra state
+            ".vectra",
+            ".vectra-cache",
+            // Always-noise dependency dirs
+            "node_modules",
             "vendor",  // Go modules vendor dir
-            ".idea",  ".vscode", ".gradle", ".tox",
-            // JS/TS framework build output. Without these, a Next.js
-            // repo balloons the index with tens of thousands of
-            // chunks from minified bundles (.next/dev, .next/server,
-            // .next/static) that drown out the user's actual source
-            // in retrieval ranking.
-            ".next",        // Next.js
-            ".nuxt",        // Nuxt
-            ".turbo",       // Turborepo
-            ".svelte-kit",  // SvelteKit
-            ".astro",       // Astro
-            ".parcel-cache",
-            ".expo",        // Expo / React Native
-            ".angular",     // Angular CLI cache
-            // Python / test caches
-            ".pytest_cache",
-            ".mypy_cache",
-            ".ruff_cache",
-            // Test coverage reports
-            "coverage",
-            ".nyc_output",
+            "__pycache__",
+            // Generic build outputs (covered by .gitignore in any
+            // healthy project, kept as fallback-only safety net)
+            "target",  // Rust / Java
+            "build",
+            "dist",
+            "out",
         };
 
         // Files exceeding this size are skipped; very large source

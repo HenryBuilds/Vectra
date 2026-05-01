@@ -5,6 +5,7 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -54,6 +55,21 @@ bool contains(const std::vector<fs::path>& v, const fs::path& needle) {
             return true;
     }
     return false;
+}
+
+// Run a shell command silently and return its exit code. Used to
+// drive `git init` from within the gitignore test below.
+int run_silently(const std::string& cmd) {
+#ifdef _WIN32
+    const std::string suffix = " >NUL 2>&1";
+#else
+    const std::string suffix = " >/dev/null 2>&1";
+#endif
+    return std::system((cmd + suffix).c_str());
+}
+
+bool git_available() {
+    return run_silently("git --version") == 0;
 }
 
 }  // namespace
@@ -133,4 +149,32 @@ TEST_CASE("walker on a non-existent path returns empty without throwing", "[walk
     const auto registry = load_repo_registry();
     const auto found = FileWalker{}.walk("/path/that/does/not/exist", registry);
     REQUIRE(found.empty());
+}
+
+TEST_CASE("walker honours .gitignore inside a git repository", "[walker][git]") {
+    if (!git_available()) {
+        SUCCEED("git not on PATH; skipping gitignore-aware walk test");
+        return;
+    }
+
+    const auto registry = load_repo_registry();
+    const auto root = make_tmp_root();
+
+    // Layout:
+    //   src/kept.py        — ordinary source, must show up
+    //   gen/ignored.py     — listed in .gitignore, must drop
+    //   private/secret.py  — listed in .gitignore, must drop
+    //   .gitignore         — declares the ignores (a regular file)
+    write_file(root / "src" / "kept.py", "def main(): pass\n");
+    write_file(root / "gen" / "ignored.py", "pass\n");
+    write_file(root / "private" / "secret.py", "pass\n");
+    write_file(root / ".gitignore", "gen/\nprivate/\n");
+
+    const std::string init_cmd = "git -C \"" + root.string() + "\" init -q";
+    REQUIRE(run_silently(init_cmd) == 0);
+
+    const auto found = FileWalker{}.walk(root, registry);
+    REQUIRE(contains(found, root / "src" / "kept.py"));
+    REQUIRE_FALSE(contains(found, root / "gen" / "ignored.py"));
+    REQUIRE_FALSE(contains(found, root / "private" / "secret.py"));
 }
