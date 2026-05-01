@@ -57,6 +57,12 @@ interface ActionMessage {
     commandId: string;
 }
 
+interface OpenFileMessage {
+    type: 'openFile';
+    path: string;
+    line: number;
+}
+
 interface MessageAction {
     label: string;
     commandId: string;
@@ -67,7 +73,8 @@ type WebviewMessage =
     | CancelMessage
     | NewChatMessage
     | ReadyMessage
-    | ActionMessage;
+    | ActionMessage
+    | OpenFileMessage;
 
 export class VectraChatPanel {
     // viewType doubles as the `activeWebviewPanelId` context key value
@@ -177,6 +184,12 @@ export class VectraChatPanel {
                 // dispatch back to a registered VS Code command.
                 void vscode.commands.executeCommand(m.commandId);
                 break;
+            case 'openFile':
+                // Source citations clicked in the assistant bubble.
+                // The path is repo-relative; resolve against the
+                // active workspace folder.
+                void this.openSource(m.path, m.line);
+                break;
         }
     }
 
@@ -228,6 +241,11 @@ export class VectraChatPanel {
             args.push('--session-id', this.sessionId);
             this.hasSentTurn = true;
         }
+        // Always opt in to stream-json. The webview renderer expects
+        // newline-delimited claude events; the legacy text path is a
+        // fallback for lines that fail JSON.parse (older claude
+        // binaries, error output before claude starts).
+        args.push('--stream-json');
 
         this.post({ type: 'started', id: m.id });
 
@@ -249,9 +267,21 @@ export class VectraChatPanel {
         this.active.set(m.id, proc);
 
         let stderrBuffer = '';
+        // Buffer for newline-delimited JSON. claude can split a
+        // single event across multiple data chunks (especially with
+        // --include-partial-messages emitting hundreds of tiny
+        // text_deltas), so we accumulate until we see a `\n`.
+        let stdoutBuffer = '';
 
         proc.stdout?.on('data', (d: Buffer) => {
-            this.post({ type: 'chunk', id: m.id, text: d.toString('utf8') });
+            stdoutBuffer += d.toString('utf8');
+            let nl = stdoutBuffer.indexOf('\n');
+            while (nl !== -1) {
+                const line = stdoutBuffer.slice(0, nl);
+                stdoutBuffer = stdoutBuffer.slice(nl + 1);
+                this.dispatchClaudeLine(m.id, line);
+                nl = stdoutBuffer.indexOf('\n');
+            }
         });
         proc.stderr?.on('data', (d: Buffer) => {
             // Vectra prints retrieval pipeline timings + status to
@@ -265,6 +295,11 @@ export class VectraChatPanel {
             this.post({ type: 'error', id: m.id, message: err.message });
         });
         proc.on('close', (code) => {
+            // Flush any trailing data without a final newline.
+            if (stdoutBuffer.length > 0) {
+                this.dispatchClaudeLine(m.id, stdoutBuffer);
+                stdoutBuffer = '';
+            }
             this.active.delete(m.id);
             const exit = code ?? 0;
 
@@ -283,6 +318,267 @@ export class VectraChatPanel {
                 });
             }
             this.post({ type: 'done', id: m.id, exitCode: exit });
+        });
+    }
+
+    // One line off claude's stdout. With --output-format=stream-json
+    // each line is a JSON object documented at:
+    //   https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/sdk
+    // and shaped roughly like the Anthropic SDK streaming events,
+    // plus a few claude-specific top-level types (system / user /
+    // result). Anything that fails JSON.parse is forwarded as a
+    // legacy text chunk so a broken/older claude binary still
+    // produces visible output instead of silence.
+    private dispatchClaudeLine(id: string, raw: string): void {
+        const line = raw.trim();
+        if (!line) {
+            return;
+        }
+        let event: unknown;
+        try {
+            event = JSON.parse(line);
+        } catch {
+            this.post({ type: 'chunk', id, text: raw + '\n' });
+            return;
+        }
+        this.handleClaudeEvent(id, event);
+    }
+
+    private handleClaudeEvent(id: string, event: unknown): void {
+        if (!event || typeof event !== 'object') {
+            return;
+        }
+        const e = event as { type?: string; [k: string]: unknown };
+        switch (e.type) {
+            case 'system':
+                // Init info (session_id, model, cwd, …). The chat
+                // panel does not need any of it today.
+                return;
+            case 'stream_event':
+                this.handleStreamEvent(id, e['event']);
+                return;
+            case 'assistant':
+                // Full assistant message at end. We already
+                // accumulated each block via stream_event deltas, so
+                // re-rendering from the canonical message would
+                // duplicate content.
+                return;
+            case 'user':
+                this.handleUserMessage(id, e['message']);
+                return;
+            case 'result':
+                this.handleResult(id, e);
+                return;
+            case 'vectra_event':
+                // Vectra-emitted side-channel events on the same
+                // NDJSON stream. Currently only "context", which
+                // carries the retrieved chunks as a list — the
+                // webview renders them as a clickable Sources
+                // footer.
+                if (e['subtype'] === 'context') {
+                    this.handleContextEvent(id, e['chunks']);
+                }
+                return;
+        }
+    }
+
+    private handleContextEvent(id: string, chunks: unknown): void {
+        if (!Array.isArray(chunks)) {
+            return;
+        }
+        const sources: Array<{
+            file: string;
+            startLine: number;
+            endLine: number;
+            symbol: string;
+            kind: string;
+        }> = [];
+        for (const c of chunks) {
+            if (!c || typeof c !== 'object') continue;
+            const obj = c as {
+                file?: unknown;
+                start_line?: unknown;
+                end_line?: unknown;
+                symbol?: unknown;
+                kind?: unknown;
+            };
+            if (typeof obj.file !== 'string') continue;
+            sources.push({
+                file: obj.file,
+                startLine: typeof obj.start_line === 'number' ? obj.start_line : 0,
+                endLine: typeof obj.end_line === 'number' ? obj.end_line : 0,
+                symbol: typeof obj.symbol === 'string' ? obj.symbol : '',
+                kind: typeof obj.kind === 'string' ? obj.kind : '',
+            });
+        }
+        this.post({ type: 'sources', id, sources });
+    }
+
+    // Resolve a repo-relative path against the active workspace
+    // folder and reveal it at `line` (1-indexed). Used by the
+    // Sources footer when the user clicks a citation.
+    private async openSource(relPath: string, line: number): Promise<void> {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) {
+            void vscode.window.showErrorMessage('Vectra: no workspace folder open.');
+            return;
+        }
+        const uri = vscode.Uri.joinPath(folder.uri, relPath);
+        try {
+            const doc = await vscode.workspace.openTextDocument(uri);
+            const lineIdx = Math.max(0, line - 1);
+            const range = new vscode.Range(lineIdx, 0, lineIdx, 0);
+            await vscode.window.showTextDocument(doc, {
+                selection: range,
+                preview: false,
+                preserveFocus: false,
+            });
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            void vscode.window.showErrorMessage(
+                `Vectra: could not open ${relPath}: ${msg}`,
+            );
+        }
+    }
+
+    private handleStreamEvent(id: string, evt: unknown): void {
+        if (!evt || typeof evt !== 'object') {
+            return;
+        }
+        const e = evt as { type?: string; index?: number; [k: string]: unknown };
+
+        switch (e.type) {
+            case 'content_block_start': {
+                const idx = e['index'];
+                const block = e['content_block'] as { type?: string; id?: string; name?: string } | undefined;
+                if (typeof idx !== 'number' || !block) {
+                    return;
+                }
+                if (block.type === 'text') {
+                    this.post({ type: 'block_start', id, blockIndex: idx, block: { kind: 'text' } });
+                } else if (block.type === 'tool_use') {
+                    this.post({
+                        type: 'block_start',
+                        id,
+                        blockIndex: idx,
+                        block: {
+                            kind: 'tool_use',
+                            toolUseId: block.id ?? '',
+                            name: block.name ?? '<unknown>',
+                        },
+                    });
+                } else if (block.type === 'thinking') {
+                    this.post({ type: 'block_start', id, blockIndex: idx, block: { kind: 'thinking' } });
+                }
+                return;
+            }
+            case 'content_block_delta': {
+                const idx = e['index'];
+                const delta = e['delta'] as
+                    | { type?: string; text?: string; partial_json?: string; thinking?: string }
+                    | undefined;
+                if (typeof idx !== 'number' || !delta) {
+                    return;
+                }
+                if (delta.type === 'text_delta' && typeof delta.text === 'string') {
+                    this.post({
+                        type: 'block_delta',
+                        id,
+                        blockIndex: idx,
+                        delta: { kind: 'text', text: delta.text },
+                    });
+                } else if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+                    this.post({
+                        type: 'block_delta',
+                        id,
+                        blockIndex: idx,
+                        delta: { kind: 'tool_input', partialJson: delta.partial_json },
+                    });
+                } else if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+                    this.post({
+                        type: 'block_delta',
+                        id,
+                        blockIndex: idx,
+                        delta: { kind: 'thinking', text: delta.thinking },
+                    });
+                }
+                return;
+            }
+            case 'content_block_stop': {
+                const idx = e['index'];
+                if (typeof idx === 'number') {
+                    this.post({ type: 'block_stop', id, blockIndex: idx });
+                }
+                return;
+            }
+            // message_start / message_delta / message_stop carry
+            // overall metadata; the canonical totals arrive in the
+            // top-level 'result' event so we ignore these.
+        }
+    }
+
+    private handleUserMessage(id: string, message: unknown): void {
+        // claude returns tool_result blocks as an injected user
+        // message. We attach them to the matching tool_use block on
+        // the active assistant turn.
+        if (!message || typeof message !== 'object') {
+            return;
+        }
+        const content = (message as { content?: unknown }).content;
+        if (!Array.isArray(content)) {
+            return;
+        }
+        for (const block of content) {
+            if (!block || typeof block !== 'object') continue;
+            const b = block as {
+                type?: string;
+                tool_use_id?: string;
+                content?: unknown;
+                is_error?: boolean;
+            };
+            if (b.type !== 'tool_result' || !b.tool_use_id) {
+                continue;
+            }
+            const text =
+                typeof b.content === 'string'
+                    ? b.content
+                    : Array.isArray(b.content)
+                      ? b.content
+                            .map((c) =>
+                                typeof c === 'object' && c && 'text' in c
+                                    ? String((c as { text: unknown }).text ?? '')
+                                    : JSON.stringify(c),
+                            )
+                            .join('\n')
+                      : JSON.stringify(b.content);
+            this.post({
+                type: 'tool_result',
+                id,
+                toolUseId: b.tool_use_id,
+                content: text,
+                isError: b.is_error === true,
+            });
+        }
+    }
+
+    private handleResult(id: string, event: { [k: string]: unknown }): void {
+        const usageRaw = (event['usage'] ?? {}) as {
+            input_tokens?: number;
+            output_tokens?: number;
+            cache_read_input_tokens?: number;
+            cache_creation_input_tokens?: number;
+        };
+        this.post({
+            type: 'usage',
+            id,
+            usage: {
+                inputTokens: usageRaw.input_tokens,
+                outputTokens: usageRaw.output_tokens,
+                cacheReadInputTokens: usageRaw.cache_read_input_tokens,
+                cacheCreationInputTokens: usageRaw.cache_creation_input_tokens,
+                costUsd: typeof event['total_cost_usd'] === 'number' ? (event['total_cost_usd'] as number) : undefined,
+                durationMs: typeof event['duration_ms'] === 'number' ? (event['duration_ms'] as number) : undefined,
+            },
         });
     }
 

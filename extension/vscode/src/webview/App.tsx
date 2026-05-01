@@ -6,10 +6,63 @@ import { Composer } from './Composer';
 import { Message } from './Message';
 import { Toolbar } from './Toolbar';
 import * as host from './vscode';
-import type { ChatMessage, Inbound } from './types';
+import type { ChatMessage, Inbound, MessageBlock } from './types';
 
 function newId(): string {
     return `t${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Older builds persisted ChatMessage with `body: string` instead of
+// `blocks: MessageBlock[]`. Convert on read so a window reload after
+// the upgrade does not blank the chat.
+function migrateMessage(msg: unknown): ChatMessage | null {
+    if (!msg || typeof msg !== 'object') {
+        return null;
+    }
+    const m = msg as {
+        id?: unknown;
+        role?: unknown;
+        body?: unknown;
+        blocks?: unknown;
+        meta?: unknown;
+        actions?: unknown;
+        usage?: unknown;
+    };
+    if (typeof m.id !== 'string' || typeof m.role !== 'string') {
+        return null;
+    }
+    const role = m.role as ChatMessage['role'];
+    const meta = typeof m.meta === 'string' ? m.meta : '';
+    let blocks: MessageBlock[];
+    if (Array.isArray(m.blocks)) {
+        blocks = m.blocks as MessageBlock[];
+    } else if (typeof m.body === 'string' && m.body.length > 0) {
+        blocks = [{ kind: 'text', text: m.body }];
+    } else {
+        blocks = [];
+    }
+    return {
+        id: m.id,
+        role,
+        blocks,
+        meta,
+        actions: m.actions as ChatMessage['actions'],
+        usage: m.usage as ChatMessage['usage'],
+    };
+}
+
+function migrateHistory(raw: unknown): ChatMessage[] {
+    if (!Array.isArray(raw)) {
+        return [];
+    }
+    const out: ChatMessage[] = [];
+    for (const m of raw) {
+        const migrated = migrateMessage(m);
+        if (migrated) {
+            out.push(migrated);
+        }
+    }
+    return out;
 }
 
 function EmptyState({ onAction }: { onAction(commandId: string): void }) {
@@ -35,7 +88,9 @@ function EmptyState({ onAction }: { onAction(commandId: string): void }) {
 export function App() {
     const persisted = host.getState();
 
-    const [history, setHistory] = React.useState<ChatMessage[]>(persisted?.history ?? []);
+    const [history, setHistory] = React.useState<ChatMessage[]>(
+        migrateHistory(persisted?.history),
+    );
     const [model, setModel] = React.useState<string>(persisted?.model ?? '');
     const [effort, setEffort] = React.useState<string>(persisted?.effort ?? '');
     const [activeId, setActiveId] = React.useState<string | null>(null);
@@ -61,18 +116,132 @@ export function App() {
                 case 'started':
                     // Visual streaming state is implied by activeId.
                     break;
-                case 'chunk':
-                    setHistory((h) =>
-                        h.map((msg) =>
-                            msg.id === m.id ? { ...msg, body: msg.body + m.text } : msg,
-                        ),
-                    );
-                    break;
                 case 'meta':
                     setHistory((h) =>
                         h.map((msg) =>
                             msg.id === m.id ? { ...msg, meta: msg.meta + m.text } : msg,
                         ),
+                    );
+                    break;
+                case 'block_start':
+                    setHistory((h) =>
+                        h.map((msg) => {
+                            if (msg.id !== m.id) return msg;
+                            const blocks = [...msg.blocks];
+                            // Pad to the requested index. claude
+                            // numbers blocks 0..N-1 in emit order so
+                            // gaps should not happen, but tolerate
+                            // them with empty text placeholders.
+                            while (blocks.length <= m.blockIndex) {
+                                blocks.push({ kind: 'text', text: '' });
+                            }
+                            if (m.block.kind === 'text') {
+                                blocks[m.blockIndex] = { kind: 'text', text: '' };
+                            } else if (m.block.kind === 'tool_use') {
+                                blocks[m.blockIndex] = {
+                                    kind: 'tool_use',
+                                    toolUseId: m.block.toolUseId,
+                                    name: m.block.name,
+                                    inputRaw: '',
+                                };
+                            } else {
+                                blocks[m.blockIndex] = { kind: 'thinking', text: '' };
+                            }
+                            return { ...msg, blocks };
+                        }),
+                    );
+                    break;
+                case 'block_delta':
+                    setHistory((h) =>
+                        h.map((msg) => {
+                            if (msg.id !== m.id) return msg;
+                            const blocks = [...msg.blocks];
+                            const block = blocks[m.blockIndex];
+                            if (!block) return msg;
+                            if (m.delta.kind === 'text' && block.kind === 'text') {
+                                blocks[m.blockIndex] = {
+                                    ...block,
+                                    text: block.text + m.delta.text,
+                                };
+                            } else if (
+                                m.delta.kind === 'tool_input' &&
+                                block.kind === 'tool_use'
+                            ) {
+                                blocks[m.blockIndex] = {
+                                    ...block,
+                                    inputRaw: block.inputRaw + m.delta.partialJson,
+                                };
+                            } else if (
+                                m.delta.kind === 'thinking' &&
+                                block.kind === 'thinking'
+                            ) {
+                                blocks[m.blockIndex] = {
+                                    ...block,
+                                    text: block.text + m.delta.text,
+                                };
+                            }
+                            return { ...msg, blocks };
+                        }),
+                    );
+                    break;
+                case 'block_stop':
+                    // No-op for now. Could flip a per-block "done"
+                    // flag if we want to drop streaming-caret styling
+                    // when the block finishes.
+                    break;
+                case 'tool_result':
+                    setHistory((h) =>
+                        h.map((msg) => {
+                            if (msg.id !== m.id) return msg;
+                            let mutated = false;
+                            const blocks = msg.blocks.map((block) => {
+                                if (
+                                    block.kind === 'tool_use' &&
+                                    block.toolUseId === m.toolUseId
+                                ) {
+                                    mutated = true;
+                                    return {
+                                        ...block,
+                                        result: { content: m.content, isError: m.isError },
+                                    };
+                                }
+                                return block;
+                            });
+                            return mutated ? { ...msg, blocks } : msg;
+                        }),
+                    );
+                    break;
+                case 'usage':
+                    setHistory((h) =>
+                        h.map((msg) => (msg.id === m.id ? { ...msg, usage: m.usage } : msg)),
+                    );
+                    break;
+                case 'sources':
+                    setHistory((h) =>
+                        h.map((msg) =>
+                            msg.id === m.id ? { ...msg, sources: m.sources } : msg,
+                        ),
+                    );
+                    break;
+                case 'chunk':
+                    // Legacy fallback for non-JSON stdout (older
+                    // claude binary, raw error text). Append to the
+                    // trailing text block or create one.
+                    setHistory((h) =>
+                        h.map((msg) => {
+                            if (msg.id !== m.id) return msg;
+                            const blocks = [...msg.blocks];
+                            const last = blocks[blocks.length - 1];
+                            if (last && last.kind === 'text') {
+                                blocks[blocks.length - 1] = {
+                                    ...last,
+                                    text: last.text + m.text,
+                                };
+                            } else {
+                                blocks.push({ kind: 'text', text: m.text });
+                            }
+                            return { ...msg, blocks };
+                        }),
                     );
                     break;
                 case 'error':
@@ -82,9 +251,10 @@ export function App() {
                                 ? {
                                       ...msg,
                                       role: 'error',
-                                      body: msg.body
-                                          ? `${msg.body}\n\n${m.message}`
-                                          : m.message,
+                                      blocks: [
+                                          ...msg.blocks,
+                                          { kind: 'text', text: m.message },
+                                      ],
                                       actions: m.actions ?? msg.actions,
                                   }
                                 : msg,
@@ -118,8 +288,13 @@ export function App() {
             return;
         }
         const id = newId();
-        const userMsg: ChatMessage = { id: `${id}-u`, role: 'user', body: text, meta: '' };
-        const asstMsg: ChatMessage = { id, role: 'assistant', body: '', meta: '' };
+        const userMsg: ChatMessage = {
+            id: `${id}-u`,
+            role: 'user',
+            blocks: [{ kind: 'text', text }],
+            meta: '',
+        };
+        const asstMsg: ChatMessage = { id, role: 'assistant', blocks: [], meta: '' };
         setHistory((h) => [...h, userMsg, asstMsg]);
         setActiveId(id);
         host.postMessage({
@@ -142,6 +317,10 @@ export function App() {
         host.postMessage({ type: 'action', commandId });
     };
 
+    const handleOpenFile = (path: string, line: number) => {
+        host.postMessage({ type: 'openFile', path, line });
+    };
+
     return (
         <div className="root">
             <Toolbar
@@ -160,6 +339,7 @@ export function App() {
                             message={msg}
                             streaming={msg.id === activeId && msg.role === 'assistant'}
                             onAction={handleAction}
+                            onOpenFile={handleOpenFile}
                         />
                     ))
                 )}

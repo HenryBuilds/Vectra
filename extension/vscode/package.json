@@ -2,7 +2,7 @@
   "name": "vectra-vscode",
   "displayName": "Vectra",
   "description": "Local-first code RAG dispatch to Claude Code",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "publisher": "vectra",
   "license": "Apache-2.0",
   "repository": {
