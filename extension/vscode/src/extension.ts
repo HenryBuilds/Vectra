@@ -18,6 +18,7 @@ import * as vscode from 'vscode';
 import { AutoIndexer } from './autoIndexer';
 import { ChatStorage } from './chatStorage';
 import { VectraChatPanel } from './chatProvider';
+import { indexLock } from './indexLock';
 
 const OUTPUT_CHANNEL_NAME = 'Vectra';
 
@@ -189,7 +190,21 @@ async function commandIndex(output: vscode.OutputChannel): Promise<void> {
         vscode.window.showErrorMessage('Vectra needs an open workspace folder.');
         return;
     }
-    await runVectra(['index', '.'], cwd, output, 'Vectra is indexing the workspace…');
+    // Funnel through indexLock so a manual click does not race with the
+    // auto-indexer's FileSystemWatcher. A short wait when the auto path
+    // is mid-run is the right tradeoff — concurrent writers on the same
+    // .vectra/ SQLite file would otherwise stall on its internal lock.
+    if (indexLock.busy) {
+        output.appendLine(
+            '[vectra: waiting for the auto-indexer to finish before running manual index…]',
+        );
+    }
+    const release = await indexLock.acquire();
+    try {
+        await runVectra(['index', '.'], cwd, output, 'Vectra is indexing the workspace…');
+    } finally {
+        release();
+    }
 }
 
 export function activate(context: vscode.ExtensionContext): void {

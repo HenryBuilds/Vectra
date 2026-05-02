@@ -23,6 +23,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
+import { indexLock } from './indexLock';
+
 // File events under these prefixes are ignored. `.vectra/` matters
 // because the indexer writes its own database there — without this
 // filter every reindex would trigger another reindex, forever. `.git/`
@@ -36,8 +38,13 @@ export class AutoIndexer implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
     private debounceTimer: NodeJS.Timeout | undefined;
     private hideTimer: NodeJS.Timeout | undefined;
-    private running = false;
-    private pending = false;
+
+    // The current in-flight or queued reindex run. We coalesce: while
+    // a run is pending, additional file changes do NOT spawn extra
+    // queued runs — they fold into the existing one. The lock itself
+    // (in indexLock.ts) is what serialises against the manual
+    // `Vectra: Index workspace` command.
+    private pending: Promise<void> | null = null;
 
     constructor(
         private readonly cwd: string,
@@ -99,16 +106,32 @@ export class AutoIndexer implements vscode.Disposable {
             return;
         }
 
-        if (this.running) {
-            // A reindex is already in flight. Mark a follow-up so we
-            // pick up whatever changed while we were busy, but do not
-            // spawn a second process — the .vectra/ SQLite database
-            // tolerates concurrent readers but not concurrent writers.
-            this.pending = true;
+        // Coalesce: if a run is already pending or in flight, fold this
+        // call into it. The pending promise covers the entire wait-for-
+        // lock + spawn lifecycle, so a burst of saves only ever produces
+        // at most two queued runs (the in-flight one + one follow-up
+        // started by saves that arrived while it was running).
+        if (this.pending !== null) {
             return;
         }
 
-        this.running = true;
+        this.pending = this.acquireAndRun();
+        try {
+            await this.pending;
+        } catch {
+            // spawnIndex already logs to the output channel; we swallow
+            // here so an unhandled rejection does not surface as a
+            // toast on top of whatever the user is doing.
+        }
+    }
+
+    private async acquireAndRun(): Promise<void> {
+        const release = await indexLock.acquire();
+        // Clear `pending` the moment we hold the lock so that file
+        // changes arriving DURING the spawn can queue another run after
+        // us (rather than no-op'ing because they think one is queued).
+        this.pending = null;
+
         if (this.hideTimer !== undefined) {
             clearTimeout(this.hideTimer);
             this.hideTimer = undefined;
@@ -119,7 +142,6 @@ export class AutoIndexer implements vscode.Disposable {
         try {
             await this.spawnIndex();
         } finally {
-            this.running = false;
             this.statusBar.text = '$(database) Vectra: indexed';
             // Hide after a short dwell so the user catches the fact that
             // it ran, but the bar does not stay cluttered indefinitely.
@@ -127,11 +149,7 @@ export class AutoIndexer implements vscode.Disposable {
                 this.hideTimer = undefined;
                 this.statusBar.hide();
             }, 2000);
-
-            if (this.pending) {
-                this.pending = false;
-                void this.runReindex();
-            }
+            release();
         }
     }
 
