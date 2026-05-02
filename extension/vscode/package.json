@@ -18,7 +18,9 @@
     "Other"
   ],
   "main": "./out/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "workspaceContains:.vectra"
+  ],
   "contributes": {
     "commands": [
       {
@@ -120,6 +122,18 @@
           "minimum": 0,
           "maximum": 50,
           "markdownDescription": "Number of context chunks to surface per ask. 0 = use config / built-in default of 8."
+        },
+        "vectra.autoIndex": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Reindex the workspace automatically when files change. The CLI uses BLAKE3 file hashes and skips unchanged files, so re-runs are cheap. Disable if you prefer to run `Vectra: Index workspace` manually."
+        },
+        "vectra.autoIndexDebounceMs": {
+          "type": "integer",
+          "default": 2000,
+          "minimum": 200,
+          "maximum": 30000,
+          "markdownDescription": "Quiet period in milliseconds after a file change before auto-indexing fires. Bursts (multi-file saves, git checkouts) collapse into a single index run."
         }
       }
     }

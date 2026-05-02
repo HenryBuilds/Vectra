@@ -15,6 +15,7 @@
 import * as cp from 'child_process';
 import * as vscode from 'vscode';
 
+import { AutoIndexer } from './autoIndexer';
 import { ChatStorage } from './chatStorage';
 import { VectraChatPanel } from './chatProvider';
 
@@ -215,6 +216,18 @@ export function activate(context: vscode.ExtensionContext): void {
             VectraChatPanel.createOrShow(context.extensionUri, storage);
         }),
     );
+
+    // Auto-indexer: only meaningful when there is a workspace folder.
+    // The activation event in package.json (`workspaceContains:.vectra`)
+    // is what eagerly starts the extension in Vectra-initialised
+    // projects; here we just stand the watcher up. Projects without a
+    // workspace folder still get the manual `vectra.ask` and
+    // `vectra.index` commands.
+    const cwd = workspaceRoot();
+    if (cwd) {
+        const autoIndexer = new AutoIndexer(cwd, output, () => readSettings().binary);
+        context.subscriptions.push(autoIndexer);
+    }
 }
 
 export function deactivate(): void {
