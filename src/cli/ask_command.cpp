@@ -4,6 +4,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <filesystem>
@@ -316,6 +317,25 @@ int run_ask(const AskOptions& opts) {
         inv.extra_args.push_back("--include-partial-messages");
         inv.extra_args.push_back("--verbose");
     }
+
+    // Default to acceptEdits so file modifications go through without
+    // hanging on a permission prompt that has no UI to answer in
+    // `claude -p`. acceptEdits auto-accepts Edit / Write and common
+    // filesystem commands (mkdir, touch, mv, cp, …) within the working
+    // tree; Bash and MCP tools still require explicit approval. Skip
+    // the default if the caller already passed --permission-mode (or
+    // its alias --dangerously-skip-permissions) via --claude-arg, so
+    // an explicit choice always wins.
+    const bool user_set_permission_mode = std::any_of(
+        resolved.claude_extra_args.begin(), resolved.claude_extra_args.end(), [](const auto& a) {
+            return a == "--permission-mode" || a == "--dangerously-skip-permissions" ||
+                   a.starts_with("--permission-mode=");
+        });
+    if (!user_set_permission_mode) {
+        inv.extra_args.push_back("--permission-mode");
+        inv.extra_args.push_back("acceptEdits");
+    }
+
     for (const auto& a : resolved.claude_extra_args) {
         inv.extra_args.push_back(a);
     }
