@@ -181,12 +181,31 @@ set(VECTRA_GRAMMARS
     "dockerfile"
     "hcl"
     "make"
+    "scala"
+    "lua"
+    "html"
+    "css"
+    "sql"
+    "dart"
+    "elixir"
+    "haskell"
+    "clojure"
+    "r"
+    "zig"
 )
 foreach(_lang IN LISTS VECTRA_GRAMMARS)
     add_tree_sitter_grammar(
         NAME ${_lang}
         PATH ${CMAKE_SOURCE_DIR}/third_party/grammars/tree-sitter-${_lang})
 endforeach()
+
+# tree-sitter-ocaml ships three grammar variants (ocaml / interface /
+# type) under grammars/. We register only the regular `ocaml`
+# grammar; .mli interface files would use the `interface` variant
+# which is left for a future expansion.
+add_tree_sitter_grammar(
+    NAME ocaml
+    PATH ${CMAKE_SOURCE_DIR}/third_party/grammars/tree-sitter-ocaml/grammars/ocaml)
 
 # tree-sitter-typescript ships two parser variants in one repo.
 add_tree_sitter_grammar(

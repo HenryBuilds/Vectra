@@ -50,6 +50,18 @@ target_link_libraries(vectra_core
         vectra::grammar::dockerfile
         vectra::grammar::hcl
         vectra::grammar::make
+        vectra::grammar::scala
+        vectra::grammar::lua
+        vectra::grammar::html
+        vectra::grammar::css
+        vectra::grammar::sql
+        vectra::grammar::dart
+        vectra::grammar::elixir
+        vectra::grammar::haskell
+        vectra::grammar::clojure
+        vectra::grammar::r
+        vectra::grammar::zig
+        vectra::grammar::ocaml
         # Third-party libraries.
         BLAKE3::blake3
         tomlplusplus::tomlplusplus

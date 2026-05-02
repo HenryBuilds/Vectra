@@ -85,6 +85,30 @@ std::string fixture_for(std::string_view language) {
         return "sample.tf";
     if (language == "make")
         return "sample.mk";
+    if (language == "scala")
+        return "sample.scala";
+    if (language == "lua")
+        return "sample.lua";
+    if (language == "html")
+        return "sample.html";
+    if (language == "css")
+        return "sample.css";
+    if (language == "sql")
+        return "sample.sql";
+    if (language == "dart")
+        return "sample.dart";
+    if (language == "elixir")
+        return "sample.ex";
+    if (language == "haskell")
+        return "sample.hs";
+    if (language == "clojure")
+        return "sample.clj";
+    if (language == "r")
+        return "sample.r";
+    if (language == "zig")
+        return "sample.zig";
+    if (language == "ocaml")
+        return "sample.ml";
     return {};
 }
 
@@ -122,7 +146,19 @@ TEST_CASE("chunks query yields at least one chunk for each language fixture", "[
                                     "toml",
                                     "dockerfile",
                                     "hcl",
-                                    "make");
+                                    "make",
+                                    "scala",
+                                    "lua",
+                                    "html",
+                                    "css",
+                                    "sql",
+                                    "dart",
+                                    "elixir",
+                                    "haskell",
+                                    "clojure",
+                                    "r",
+                                    "zig",
+                                    "ocaml");
 
     INFO("language: " << language);
 
@@ -163,7 +199,19 @@ TEST_CASE("symbols and imports queries compile cleanly for each language", "[lan
                                     "toml",
                                     "dockerfile",
                                     "hcl",
-                                    "make");
+                                    "make",
+                                    "scala",
+                                    "lua",
+                                    "html",
+                                    "css",
+                                    "sql",
+                                    "dart",
+                                    "elixir",
+                                    "haskell",
+                                    "clojure",
+                                    "r",
+                                    "zig",
+                                    "ocaml");
 
     INFO("language: " << language);
 

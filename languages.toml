@@ -246,3 +246,119 @@ symbol      = "tree_sitter_make"
 chunks      = "queries/make/chunks.scm"
 symbols     = "queries/make/symbols.scm"
 imports     = "queries/make/imports.scm"
+
+# ---------------------------------------------------------------------------
+# Long-tail programming languages.
+# ---------------------------------------------------------------------------
+
+[[language]]
+name        = "scala"
+extensions  = ["scala", "sc"]
+grammar_dir = "third_party/grammars/tree-sitter-scala"
+symbol      = "tree_sitter_scala"
+chunks      = "queries/scala/chunks.scm"
+symbols     = "queries/scala/symbols.scm"
+imports     = "queries/scala/imports.scm"
+
+[[language]]
+name        = "lua"
+extensions  = ["lua"]
+grammar_dir = "third_party/grammars/tree-sitter-lua"
+symbol      = "tree_sitter_lua"
+chunks      = "queries/lua/chunks.scm"
+symbols     = "queries/lua/symbols.scm"
+imports     = "queries/lua/imports.scm"
+
+[[language]]
+name        = "html"
+extensions  = ["html", "htm", "xhtml"]
+grammar_dir = "third_party/grammars/tree-sitter-html"
+symbol      = "tree_sitter_html"
+chunks      = "queries/html/chunks.scm"
+symbols     = "queries/html/symbols.scm"
+imports     = "queries/html/imports.scm"
+
+[[language]]
+name        = "css"
+extensions  = ["css"]
+grammar_dir = "third_party/grammars/tree-sitter-css"
+symbol      = "tree_sitter_css"
+chunks      = "queries/css/chunks.scm"
+symbols     = "queries/css/symbols.scm"
+imports     = "queries/css/imports.scm"
+
+[[language]]
+name        = "sql"
+extensions  = ["sql"]
+grammar_dir = "third_party/grammars/tree-sitter-sql"
+symbol      = "tree_sitter_sql"
+chunks      = "queries/sql/chunks.scm"
+symbols     = "queries/sql/symbols.scm"
+imports     = "queries/sql/imports.scm"
+
+[[language]]
+name        = "dart"
+extensions  = ["dart"]
+grammar_dir = "third_party/grammars/tree-sitter-dart"
+symbol      = "tree_sitter_dart"
+chunks      = "queries/dart/chunks.scm"
+symbols     = "queries/dart/symbols.scm"
+imports     = "queries/dart/imports.scm"
+
+[[language]]
+name        = "elixir"
+extensions  = ["ex", "exs"]
+grammar_dir = "third_party/grammars/tree-sitter-elixir"
+symbol      = "tree_sitter_elixir"
+chunks      = "queries/elixir/chunks.scm"
+symbols     = "queries/elixir/symbols.scm"
+imports     = "queries/elixir/imports.scm"
+
+[[language]]
+name        = "haskell"
+extensions  = ["hs", "lhs"]
+grammar_dir = "third_party/grammars/tree-sitter-haskell"
+symbol      = "tree_sitter_haskell"
+chunks      = "queries/haskell/chunks.scm"
+symbols     = "queries/haskell/symbols.scm"
+imports     = "queries/haskell/imports.scm"
+
+[[language]]
+name        = "clojure"
+extensions  = ["clj", "cljs", "cljc", "edn"]
+grammar_dir = "third_party/grammars/tree-sitter-clojure"
+symbol      = "tree_sitter_clojure"
+chunks      = "queries/clojure/chunks.scm"
+symbols     = "queries/clojure/symbols.scm"
+imports     = "queries/clojure/imports.scm"
+
+[[language]]
+name        = "r"
+extensions  = ["r", "R"]
+grammar_dir = "third_party/grammars/tree-sitter-r"
+symbol      = "tree_sitter_r"
+chunks      = "queries/r/chunks.scm"
+symbols     = "queries/r/symbols.scm"
+imports     = "queries/r/imports.scm"
+
+[[language]]
+name        = "zig"
+extensions  = ["zig"]
+grammar_dir = "third_party/grammars/tree-sitter-zig"
+symbol      = "tree_sitter_zig"
+chunks      = "queries/zig/chunks.scm"
+symbols     = "queries/zig/symbols.scm"
+imports     = "queries/zig/imports.scm"
+
+# tree-sitter-ocaml ships three variants (ocaml / interface / type)
+# inside grammars/. We register only the regular implementation
+# grammar; .mli interface files would need the `interface` variant
+# which is deferred.
+[[language]]
+name        = "ocaml"
+extensions  = ["ml"]
+grammar_dir = "third_party/grammars/tree-sitter-ocaml/grammars/ocaml"
+symbol      = "tree_sitter_ocaml"
+chunks      = "queries/ocaml/chunks.scm"
+symbols     = "queries/ocaml/symbols.scm"
+imports     = "queries/ocaml/imports.scm"

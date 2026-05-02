@@ -24,6 +24,18 @@ const TSLanguage* tree_sitter_toml();
 const TSLanguage* tree_sitter_dockerfile();
 const TSLanguage* tree_sitter_hcl();
 const TSLanguage* tree_sitter_make();
+const TSLanguage* tree_sitter_scala();
+const TSLanguage* tree_sitter_lua();
+const TSLanguage* tree_sitter_html();
+const TSLanguage* tree_sitter_css();
+const TSLanguage* tree_sitter_sql();
+const TSLanguage* tree_sitter_dart();
+const TSLanguage* tree_sitter_elixir();
+const TSLanguage* tree_sitter_haskell();
+const TSLanguage* tree_sitter_clojure();
+const TSLanguage* tree_sitter_r();
+const TSLanguage* tree_sitter_zig();
+const TSLanguage* tree_sitter_ocaml();
 }  // extern "C"
 
 namespace vectra::core::detail {
@@ -75,6 +87,30 @@ const TSLanguage* grammar_by_symbol(std::string_view symbol) noexcept {
         return tree_sitter_hcl();
     if (symbol == "tree_sitter_make")
         return tree_sitter_make();
+    if (symbol == "tree_sitter_scala")
+        return tree_sitter_scala();
+    if (symbol == "tree_sitter_lua")
+        return tree_sitter_lua();
+    if (symbol == "tree_sitter_html")
+        return tree_sitter_html();
+    if (symbol == "tree_sitter_css")
+        return tree_sitter_css();
+    if (symbol == "tree_sitter_sql")
+        return tree_sitter_sql();
+    if (symbol == "tree_sitter_dart")
+        return tree_sitter_dart();
+    if (symbol == "tree_sitter_elixir")
+        return tree_sitter_elixir();
+    if (symbol == "tree_sitter_haskell")
+        return tree_sitter_haskell();
+    if (symbol == "tree_sitter_clojure")
+        return tree_sitter_clojure();
+    if (symbol == "tree_sitter_r")
+        return tree_sitter_r();
+    if (symbol == "tree_sitter_zig")
+        return tree_sitter_zig();
+    if (symbol == "tree_sitter_ocaml")
+        return tree_sitter_ocaml();
     return nullptr;
 }
 

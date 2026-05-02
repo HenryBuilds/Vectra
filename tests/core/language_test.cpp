@@ -21,15 +21,17 @@ TEST_CASE("registry loads languages.toml without throwing", "[language]") {
     REQUIRE_NOTHROW(load_repo_registry());
 }
 
-TEST_CASE("registry exposes all twenty-one built-in languages", "[language]") {
+TEST_CASE("registry exposes all thirty-three built-in languages", "[language]") {
     const auto registry = load_repo_registry();
 
-    REQUIRE(registry.all().size() == 21);
+    REQUIRE(registry.all().size() == 33);
 
     for (const auto* name :
-         {"c",        "cpp",  "python", "javascript", "typescript", "tsx",    "rust",
-          "go",       "java", "ruby",   "csharp",     "bash",       "kotlin", "php",
-          "markdown", "json", "yaml",   "toml",       "dockerfile", "hcl",    "make"}) {
+         {"c",        "cpp",     "python", "javascript", "typescript", "tsx",    "rust",
+          "go",       "java",    "ruby",   "csharp",     "bash",       "kotlin", "php",
+          "markdown", "json",    "yaml",   "toml",       "dockerfile", "hcl",    "make",
+          "scala",    "lua",     "html",   "css",        "sql",        "dart",   "elixir",
+          "haskell",  "clojure", "r",      "zig",        "ocaml"}) {
         const auto* lang = registry.by_name(name);
         REQUIRE(lang != nullptr);
         REQUIRE(lang->ts_language != nullptr);
