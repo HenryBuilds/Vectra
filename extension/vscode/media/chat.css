@@ -895,3 +895,173 @@ button.source-item:focus {
 .permission-btn.approve:hover {
     background: var(--vscode-button-hoverBackground);
 }
+
+/* ------------------------------------------------------------------ */
+/* Inline tool-use blocks in the chat (Edit / Write / MultiEdit)       */
+/* ------------------------------------------------------------------ */
+
+.tool-edit,
+.tool-bash {
+    border: 1px solid var(--vscode-panel-border, rgba(127, 127, 127, 0.25));
+    border-radius: 6px;
+    background: var(--vscode-textBlockQuote-background, rgba(127, 127, 127, 0.05));
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tool-edit.status-running,
+.tool-bash.status-running {
+    border-color: var(--vscode-charts-blue, var(--vscode-textLink-foreground));
+}
+
+.tool-edit.status-error,
+.tool-bash.status-error {
+    border-color: var(--vscode-errorForeground);
+}
+
+.tool-edit-header,
+.tool-bash-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 11px;
+}
+
+.tool-edit-name,
+.tool-bash-name {
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-weight: 600;
+    color: var(--vscode-charts-blue, var(--vscode-textLink-foreground));
+}
+
+.tool-file-link {
+    align-self: flex-start;
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    color: var(--vscode-textLink-foreground);
+    word-break: break-all;
+}
+
+.tool-file-link:hover {
+    text-decoration: underline;
+    color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+}
+
+.tool-edit-pending {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    font-style: italic;
+}
+
+.tool-diff {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    gap: 4px;
+}
+
+.tool-diff-label {
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-weight: 700;
+    text-align: center;
+    user-select: none;
+    padding-top: 4px;
+}
+
+.tool-diff-old,
+.tool-diff-new {
+    margin: 0;
+    padding: 4px 6px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-radius: 3px;
+}
+
+.tool-diff-old {
+    background: var(--vscode-diffEditor-removedTextBackground, rgba(255, 0, 0, 0.12));
+    color: var(--vscode-foreground);
+}
+
+.tool-diff-new {
+    background: var(--vscode-diffEditor-insertedTextBackground, rgba(0, 200, 0, 0.14));
+    color: var(--vscode-foreground);
+}
+
+.tool-edit-error {
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: rgba(255, 64, 64, 0.08);
+    border-left: 3px solid var(--vscode-errorForeground);
+    border-radius: 3px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    color: var(--vscode-errorForeground);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.tool-bash-desc {
+    color: var(--vscode-foreground);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.tool-bash-cmd {
+    margin: 0;
+    padding: 8px 10px;
+    background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
+    border-left: 3px solid var(--vscode-textLink-foreground);
+    border-radius: 3px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--vscode-foreground);
+}
+
+.tool-bash-output {
+    margin: 0;
+    padding: 6px 8px;
+    background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.06));
+    border-radius: 3px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--vscode-foreground);
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.tool-bash-output.is-error {
+    background: rgba(255, 64, 64, 0.08);
+    color: var(--vscode-errorForeground);
+}
+
+/* ------------------------------------------------------------------ */
+/* Hallucination warning banner (claude claimed an edit it didn't make)*/
+/* ------------------------------------------------------------------ */
+
+.hallucination-warning {
+    margin-top: 6px;
+    padding: 8px 12px;
+    background: rgba(255, 180, 0, 0.12);
+    border-left: 3px solid var(--vscode-charts-yellow, rgba(255, 200, 0, 0.6));
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--vscode-foreground);
+}
+
+.hallucination-warning strong {
+    color: var(--vscode-charts-yellow, var(--vscode-foreground));
+}

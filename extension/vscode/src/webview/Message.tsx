@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 
+import * as host from './vscode';
 import type {
     ChatMessage,
     MessageBlock,
@@ -10,6 +11,30 @@ import type {
     ToolUseBlock,
     UsageData,
 } from './types';
+
+// Loose JSON parse for streamed tool_use input. Claude streams
+// `inputRaw` as partial_json deltas, so the string may not be valid
+// JSON yet during the running phase. We return null until it parses
+// cleanly; renderers fall back to the generic "still streaming"
+// view in that case.
+function tryParseJson(raw: string): Record<string, unknown> | null {
+    const t = raw.trim();
+    if (!t) return null;
+    try {
+        const v = JSON.parse(t);
+        return typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : null;
+    } catch {
+        return null;
+    }
+}
+
+function pickString(o: Record<string, unknown>, ...keys: string[]): string | null {
+    for (const k of keys) {
+        const v = o[k];
+        if (typeof v === 'string') return v;
+    }
+    return null;
+}
 
 interface MessageProps {
     message: ChatMessage;
@@ -24,8 +49,43 @@ const ROLE_LABELS: Record<ChatMessage['role'], string> = {
     error: 'Error',
 };
 
+// Detect the "claude claimed an edit but never called Edit/Write"
+// hallucination pattern. Triggers only on settled assistant turns
+// (streaming === false): we look at the rendered text for German /
+// English "I changed it" phrasings and check whether a successful
+// Edit / Write / MultiEdit tool_use exists in the same turn. False
+// positives are acceptable — the warning is advisory, the user
+// always has the file path in their head — and false negatives are
+// fine too (claude phrases "done" in many ways). Goal is just
+// "catch the most common case", not "linguistic completeness".
+const EDIT_CLAIM_RE =
+    /\b(edited|updated|changed|modified|applied|geändert|aktualisiert|geupdated|erledigt|done|saved|wrote|created|patched)\b/i;
+
+function detectsEditClaim(blocks: MessageBlock[]): boolean {
+    for (const b of blocks) {
+        if (b.kind === 'text' && EDIT_CLAIM_RE.test(b.text)) return true;
+    }
+    return false;
+}
+
+function hasSuccessfulEditTool(blocks: MessageBlock[]): boolean {
+    for (const b of blocks) {
+        if (b.kind !== 'tool_use') continue;
+        if (b.name !== 'Edit' && b.name !== 'MultiEdit' && b.name !== 'Write') continue;
+        if (b.result === undefined) continue; // still running
+        if (b.result.isError === true) continue;
+        return true;
+    }
+    return false;
+}
+
 export function Message({ message, streaming, onAction, onOpenFile }: MessageProps) {
     const className = `message ${message.role}${streaming ? ' streaming' : ''}`;
+    const showHallucinationWarning =
+        !streaming &&
+        message.role === 'assistant' &&
+        detectsEditClaim(message.blocks) &&
+        !hasSuccessfulEditTool(message.blocks);
     return (
         <div className={className}>
             <div className="role">{ROLE_LABELS[message.role]}</div>
@@ -33,6 +93,14 @@ export function Message({ message, streaming, onAction, onOpenFile }: MessagePro
             {message.blocks.map((block, i) => (
                 <BlockRenderer key={i} block={block} />
             ))}
+            {showHallucinationWarning && (
+                <div className="hallucination-warning" role="alert">
+                    <strong>Heads up:</strong> Vectra didn't observe a successful
+                    Edit / Write tool call in this turn — claude may be claiming a
+                    change it didn't actually make. Verify the file before relying on
+                    the answer.
+                </div>
+            )}
             {message.sources && message.sources.length > 0 && (
                 <SourcesFooter sources={message.sources} onOpen={onOpenFile} />
             )}
@@ -65,17 +133,143 @@ function BlockRenderer({ block }: { block: MessageBlock }) {
     return <ThinkingRender block={block} />;
 }
 
-// Render a tool_use block as a collapsible badge: tool name +
-// running/ok/error status, with the input JSON and (when settled)
-// the tool result available behind the toggle. claude streams the
-// input as partial_json deltas, so inputRaw may be incomplete or
-// not parseable until the matching block_stop arrives — we display
-// it verbatim and let the user judge.
+// Tool-use dispatcher. File-modifying tools render as inline diff
+// blocks with file links; Bash renders as a styled command block;
+// everything else falls back to the generic collapsible-JSON view.
+// All renderers share the same status pill (running / ok / error)
+// at the top so the user can scan a long turn quickly.
 function ToolUseRender({ block }: { block: ToolUseBlock }) {
-    const [expanded, setExpanded] = React.useState(false);
+    if (block.name === 'Edit' || block.name === 'MultiEdit' || block.name === 'Write') {
+        return <EditToolRender block={block} />;
+    }
+    if (block.name === 'Bash') {
+        return <BashToolRender block={block} />;
+    }
+    return <GenericToolUseRender block={block} />;
+}
+
+function toolStatus(block: ToolUseBlock): {
+    status: 'running' | 'ok' | 'error';
+    isError: boolean;
+} {
     const settled = block.result !== undefined;
     const isError = block.result?.isError === true;
-    const status = !settled ? 'running' : isError ? 'error' : 'ok';
+    return {
+        status: !settled ? 'running' : isError ? 'error' : 'ok',
+        isError,
+    };
+}
+
+// File link inside a chat tool-use block. Posts an openFile to the
+// host so the user can open the affected file in a side editor
+// while reading the diff.
+function ToolFileLink({ path, line }: { path: string; line: number }) {
+    const click = () => host.postMessage({ type: 'openFile', path, line });
+    return (
+        <button
+            type="button"
+            className="tool-file-link"
+            onClick={click}
+            title="Open file"
+        >
+            {path}
+        </button>
+    );
+}
+
+// Render Edit / MultiEdit / Write tool-uses inline as a coloured
+// diff. Mirrors how Claude Code's IDE extension surfaces the
+// pending change so the user can read the modification straight
+// from the chat without expanding any toggles.
+//
+// While the tool is still streaming (inputRaw not yet valid JSON)
+// we fall back to a "preparing edit…" placeholder. Once parsed,
+// the diff appears with the file link, deleted line in red, added
+// line in green, and any tool_result / error after the diff.
+function EditToolRender({ block }: { block: ToolUseBlock }) {
+    const { status, isError } = toolStatus(block);
+    const parsed = tryParseJson(block.inputRaw);
+
+    const file = parsed ? pickString(parsed, 'file_path', 'filePath', 'path') : null;
+    const oldStr = parsed ? pickString(parsed, 'old_string', 'oldString') : null;
+    const newStr = parsed
+        ? pickString(parsed, 'new_string', 'newString', 'content')
+        : null;
+
+    const heading =
+        block.name === 'Write'
+            ? 'Write file'
+            : block.name === 'MultiEdit'
+              ? 'MultiEdit'
+              : 'Edit';
+
+    return (
+        <div className={`tool-edit status-${status}`}>
+            <div className="tool-edit-header">
+                <span className="tool-edit-name">{heading}</span>
+                <span className={`tool-status status-${status}`}>{status}</span>
+            </div>
+            {file !== null && <ToolFileLink path={file} line={1} />}
+            {parsed === null && (
+                <div className="tool-edit-pending">preparing edit…</div>
+            )}
+            {oldStr !== null && (
+                <div className="tool-diff">
+                    <span className="tool-diff-label">−</span>
+                    <pre className="tool-diff-old">{oldStr}</pre>
+                </div>
+            )}
+            {newStr !== null && (
+                <div className="tool-diff">
+                    <span className="tool-diff-label">+</span>
+                    <pre className="tool-diff-new">{newStr}</pre>
+                </div>
+            )}
+            {block.result && isError && (
+                <div className="tool-edit-error">{block.result.content}</div>
+            )}
+        </div>
+    );
+}
+
+// Render Bash tool-uses with the command in a fenced code block,
+// optional description, and the captured output (or error) below
+// once the tool settles.
+function BashToolRender({ block }: { block: ToolUseBlock }) {
+    const { status, isError } = toolStatus(block);
+    const parsed = tryParseJson(block.inputRaw);
+    const cmd = parsed ? pickString(parsed, 'command', 'cmd') : null;
+    const desc = parsed ? pickString(parsed, 'description', 'desc') : null;
+
+    return (
+        <div className={`tool-bash status-${status}`}>
+            <div className="tool-bash-header">
+                <span className="tool-bash-name">Bash</span>
+                <span className={`tool-status status-${status}`}>{status}</span>
+            </div>
+            {desc !== null && desc.trim().length > 0 && (
+                <div className="tool-bash-desc">{desc}</div>
+            )}
+            {cmd !== null ? (
+                <pre className="tool-bash-cmd">{cmd}</pre>
+            ) : (
+                <div className="tool-edit-pending">preparing command…</div>
+            )}
+            {block.result && (
+                <pre className={`tool-bash-output${isError ? ' is-error' : ''}`}>
+                    {block.result.content}
+                </pre>
+            )}
+        </div>
+    );
+}
+
+// Generic collapsible tool_use view for anything that isn't a
+// dedicated specialisation: tool name + status, raw input + result
+// behind a toggle. Same shape as the original ToolUseRender.
+function GenericToolUseRender({ block }: { block: ToolUseBlock }) {
+    const [expanded, setExpanded] = React.useState(false);
+    const { status, isError } = toolStatus(block);
     return (
         <div className={`tool-use status-${status}`}>
             <button
