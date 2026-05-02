@@ -127,13 +127,24 @@ export interface OpenFileOutbound {
     line: number;
 }
 
+// Webview asks the host to persist the current session. Sent
+// after every settled assistant turn (on `done`) and on explicit
+// user actions like "+ New chat". The host stamps updatedAt and
+// writes <storage>/sessions/<id>.json.
+export interface SaveSessionOutbound {
+    type: 'saveSession';
+    title: string;
+    messages: ChatMessage[];
+}
+
 export type Outbound =
     | SendOutbound
     | CancelOutbound
     | NewChatOutbound
     | ReadyOutbound
     | ActionOutbound
-    | OpenFileOutbound;
+    | OpenFileOutbound
+    | SaveSessionOutbound;
 
 // ---- Incoming (host -> webview) ---------------------------------
 
@@ -246,10 +257,27 @@ export interface ConfigInbound {
     defaultModel: string;
     defaultEffort: string;
     defaultTopK: number;
+    // True iff <workspace>/.vectra/index.db exists. The empty
+    // state hides the "Index this workspace" CTA when an index is
+    // already present, which removes a recurring confusion source
+    // ("vectra is asking me to index again even though I did").
+    indexExists: boolean;
 }
 
 export interface NewChatInbound {
     type: 'newChat';
+}
+
+// Host pushes a session into the webview, either right after
+// startup (the most recent session for this workspace) or after
+// the user picks one from the history QuickPick. Replaces the
+// current chat completely; the webview must drop any in-memory
+// turn and adopt this session's messages verbatim.
+//
+// `session` is null for "start fresh" (newChat after a save).
+export interface SessionLoadedInbound {
+    type: 'sessionLoaded';
+    session: { id: string; title: string; messages: ChatMessage[] } | null;
 }
 
 export type Inbound =
@@ -265,7 +293,8 @@ export type Inbound =
     | DoneInbound
     | ErrorInbound
     | ConfigInbound
-    | NewChatInbound;
+    | NewChatInbound
+    | SessionLoadedInbound;
 
 export interface PersistedState {
     history: ChatMessage[];

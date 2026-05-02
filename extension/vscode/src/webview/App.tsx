@@ -12,6 +12,21 @@ function newId(): string {
     return `t${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Pick a short, human-friendly title for the session. The first
+// user message wins — it's almost always what the chat is "about".
+// Title is shown in the panel tab and the history QuickPick.
+function deriveTitle(messages: ChatMessage[]): string {
+    for (const msg of messages) {
+        if (msg.role !== 'user') continue;
+        for (const block of msg.blocks) {
+            if (block.kind === 'text' && block.text.trim().length > 0) {
+                return block.text.replace(/\s+/g, ' ').trim().slice(0, 200);
+            }
+        }
+    }
+    return '(untitled)';
+}
+
 // Older builds persisted ChatMessage with `body: string` instead of
 // `blocks: MessageBlock[]`. Convert on read so a window reload after
 // the upgrade does not blank the chat.
@@ -65,22 +80,29 @@ function migrateHistory(raw: unknown): ChatMessage[] {
     return out;
 }
 
-function EmptyState({ onAction }: { onAction(commandId: string): void }) {
+interface EmptyStateProps {
+    onAction(commandId: string): void;
+    indexExists: boolean;
+}
+
+function EmptyState({ onAction, indexExists }: EmptyStateProps) {
     return (
         <div className="empty-state">
             <div className="empty-title">Ask Vectra anything about this codebase</div>
             Each turn runs hybrid retrieval (BM25 + embeddings) over the local index, then
             hands the top chunks to <code>claude -p</code>. Switch the model and thinking
             budget at the top of the panel.
-            <div className="actions">
-                <button
-                    type="button"
-                    className="action"
-                    onClick={() => onAction('vectra.index')}
-                >
-                    Index this workspace
-                </button>
-            </div>
+            {!indexExists && (
+                <div className="actions">
+                    <button
+                        type="button"
+                        className="action"
+                        onClick={() => onAction('vectra.index')}
+                    >
+                        Index this workspace
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
@@ -94,6 +116,11 @@ export function App() {
     const [model, setModel] = React.useState<string>(persisted?.model ?? '');
     const [effort, setEffort] = React.useState<string>(persisted?.effort ?? '');
     const [activeId, setActiveId] = React.useState<string | null>(null);
+    // Persisted on the host side via the `config` event from
+    // chatProvider.ts. Default true to avoid flashing the
+    // "Index this workspace" CTA before the host has a chance to
+    // tell us the index is already there.
+    const [indexExists, setIndexExists] = React.useState<boolean>(true);
 
     const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -263,6 +290,20 @@ export function App() {
                     break;
                 case 'done':
                     setActiveId((cur) => (cur === m.id ? null : cur));
+                    // The turn is settled; persist the whole
+                    // session to disk so a reload picks up exactly
+                    // where we left off. The host stamps
+                    // updatedAt and writes the JSON.
+                    setHistory((h) => {
+                        if (h.length > 0) {
+                            host.postMessage({
+                                type: 'saveSession',
+                                title: deriveTitle(h),
+                                messages: h,
+                            });
+                        }
+                        return h;
+                    });
                     break;
                 case 'newChat':
                     setHistory([]);
@@ -271,6 +312,20 @@ export function App() {
                 case 'config':
                     // Future: prefill model/effort from config the
                     // first time, never override the user's pick.
+                    setIndexExists(m.indexExists);
+                    break;
+                case 'sessionLoaded':
+                    // Host pushed a session into us — either the
+                    // most recent one on panel mount, or the one
+                    // the user picked from the history QuickPick.
+                    // Replace the chat entirely; null means "start
+                    // fresh".
+                    if (m.session) {
+                        setHistory(migrateHistory(m.session.messages));
+                    } else {
+                        setHistory([]);
+                    }
+                    setActiveId(null);
                     break;
             }
         };
@@ -331,7 +386,7 @@ export function App() {
             />
             <main className="messages">
                 {history.length === 0 ? (
-                    <EmptyState onAction={handleAction} />
+                    <EmptyState onAction={handleAction} indexExists={indexExists} />
                 ) : (
                     history.map((msg) => (
                         <Message

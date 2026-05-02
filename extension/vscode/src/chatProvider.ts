@@ -30,6 +30,8 @@ import * as cp from 'child_process';
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
+import { ChatStorage, relativeTime } from './chatStorage';
+
 interface SendMessage {
     type: 'send';
     id: string;
@@ -63,6 +65,12 @@ interface OpenFileMessage {
     line: number;
 }
 
+interface SaveSessionMessage {
+    type: 'saveSession';
+    title: string;
+    messages: unknown[];
+}
+
 interface MessageAction {
     label: string;
     commandId: string;
@@ -74,7 +82,8 @@ type WebviewMessage =
     | NewChatMessage
     | ReadyMessage
     | ActionMessage
-    | OpenFileMessage;
+    | OpenFileMessage
+    | SaveSessionMessage;
 
 export class VectraChatPanel {
     // viewType doubles as the `activeWebviewPanelId` context key value
@@ -85,20 +94,22 @@ export class VectraChatPanel {
 
     private readonly panel: vscode.WebviewPanel;
     private readonly extensionUri: vscode.Uri;
+    private readonly storage: ChatStorage;
     private readonly disposables: vscode.Disposable[] = [];
     private readonly active = new Map<string, cp.ChildProcess>();
 
-    // Conversation continuity. One UUID per chat session (one panel
-    // = one session); reset on newChat. claude -p is one-shot per
-    // invocation, but it persists transcripts to disk under whatever
-    // `--session-id` it was given, so passing the same UUID on every
-    // turn — first as --session-id, then as --resume — gives the
-    // user a real multi-turn conversation instead of N independent
-    // monologues.
+    // Conversation continuity. One UUID per chat session; the same
+    // UUID is forwarded to claude as --session-id (first turn) /
+    // --resume (follow-ups) so claude's on-disk transcript stays
+    // aligned with what the webview shows. hasSentTurn flips to
+    // true on the first send AND on loadSession (an existing
+    // session must use --resume going forward, never --session-id).
     private sessionId: string = crypto.randomUUID();
     private hasSentTurn: boolean = false;
+    private sessionTitle: string = '';
+    private sessionCreatedAt: number = 0;
 
-    public static createOrShow(extensionUri: vscode.Uri): void {
+    public static createOrShow(extensionUri: vscode.Uri, storage: ChatStorage): void {
         const column = vscode.ViewColumn.Beside;
 
         if (VectraChatPanel.current) {
@@ -123,16 +134,25 @@ export class VectraChatPanel {
         const iconUri = vscode.Uri.joinPath(extensionUri, 'media', 'icon.svg');
         panel.iconPath = { light: iconUri, dark: iconUri };
 
-        VectraChatPanel.current = new VectraChatPanel(panel, extensionUri);
+        VectraChatPanel.current = new VectraChatPanel(panel, extensionUri, storage);
     }
 
     public static newChat(): void {
         VectraChatPanel.current?.newChatInternal();
     }
 
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+    public static showHistory(): void {
+        void VectraChatPanel.current?.showHistoryInternal();
+    }
+
+    private constructor(
+        panel: vscode.WebviewPanel,
+        extensionUri: vscode.Uri,
+        storage: ChatStorage,
+    ) {
         this.panel = panel;
         this.extensionUri = extensionUri;
+        this.storage = storage;
 
         this.panel.webview.html = this.renderHtml(this.panel.webview);
 
@@ -143,6 +163,13 @@ export class VectraChatPanel {
         );
 
         this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+
+        // Hand the most-recently-touched session for this
+        // workspace back to the webview on first paint. Kills the
+        // "the chat asks me to re-index after every reload" UX
+        // wart: a returning user sees their last conversation
+        // instead of the empty state.
+        void this.restoreMostRecentSession();
     }
 
     private dispose(): void {
@@ -161,6 +188,116 @@ export class VectraChatPanel {
         // reload the previous transcript.
         this.sessionId = crypto.randomUUID();
         this.hasSentTurn = false;
+        this.sessionTitle = '';
+        this.sessionCreatedAt = 0;
+        // Update the panel tab title to match. The previous
+        // session's title was set on first send, so newChat
+        // intentionally clears it.
+        this.panel.title = 'Vectra';
+    }
+
+    // Show a QuickPick of all sessions for the active workspace.
+    // Picking one switches the webview to that conversation and
+    // sets sessionId/hasSentTurn so the next send uses --resume
+    // against claude's matching transcript.
+    private async showHistoryInternal(): Promise<void> {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) {
+            void vscode.window.showInformationMessage(
+                'Vectra: open a workspace folder to use chat history.',
+            );
+            return;
+        }
+        const sessions = await this.storage.list(folder.uri);
+        if (sessions.length === 0) {
+            void vscode.window.showInformationMessage(
+                'Vectra: no past sessions for this workspace yet.',
+            );
+            return;
+        }
+        type Item = vscode.QuickPickItem & { sessionId: string };
+        const items: Item[] = sessions.map((s) => ({
+            label: s.title || '(untitled)',
+            description: relativeTime(s.updatedAt),
+            detail: s.id === this.sessionId ? 'current session' : undefined,
+            sessionId: s.id,
+        }));
+        const picked = await vscode.window.showQuickPick(items, {
+            title: 'Vectra: switch session',
+            placeHolder: 'pick a past chat to resume',
+            matchOnDescription: true,
+        });
+        if (!picked) return;
+        if (picked.sessionId === this.sessionId) return;
+        await this.loadSession(folder.uri, picked.sessionId);
+    }
+
+    private async loadSession(workspaceUri: vscode.Uri, id: string): Promise<void> {
+        const session = await this.storage.load(workspaceUri, id);
+        if (!session) {
+            void vscode.window.showErrorMessage(`Vectra: could not load session ${id}.`);
+            return;
+        }
+        // Kill any in-flight turn before swapping; mixing two
+        // sessions' streams in the same webview state would be
+        // confusing both visually and for claude.
+        this.killAll();
+
+        this.sessionId = session.id;
+        this.sessionTitle = session.title;
+        this.sessionCreatedAt = session.createdAt;
+        // An existing session must use --resume going forward,
+        // never --session-id (which would reset claude's
+        // transcript on disk).
+        this.hasSentTurn = true;
+        this.panel.title = `Vectra · ${truncateForTitle(session.title)}`;
+
+        this.post({
+            type: 'sessionLoaded',
+            session: {
+                id: session.id,
+                title: session.title,
+                messages: session.messages,
+            },
+        });
+    }
+
+    private async restoreMostRecentSession(): Promise<void> {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) return;
+        const sessions = await this.storage.list(folder.uri);
+        if (sessions.length === 0) return;
+        await this.loadSession(folder.uri, sessions[0].id);
+    }
+
+    private async handleSaveSession(m: SaveSessionMessage): Promise<void> {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) return;
+        if (!Array.isArray(m.messages) || m.messages.length === 0) return;
+
+        const now = Date.now();
+        if (this.sessionCreatedAt === 0) {
+            this.sessionCreatedAt = now;
+        }
+        const title = (m.title || this.sessionTitle || '(untitled)').slice(0, 200);
+        this.sessionTitle = title;
+        this.panel.title = `Vectra · ${truncateForTitle(title)}`;
+
+        try {
+            await this.storage.save(folder.uri, {
+                version: 1,
+                id: this.sessionId,
+                title,
+                createdAt: this.sessionCreatedAt,
+                updatedAt: now,
+                messages: m.messages,
+            });
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            void vscode.window.showErrorMessage(
+                `Vectra: failed to persist chat session: ${msg}`,
+            );
+        }
     }
 
     private handleMessage(m: WebviewMessage): void {
@@ -177,7 +314,7 @@ export class VectraChatPanel {
                 this.killAll();
                 break;
             case 'ready':
-                this.postConfig();
+                void this.postConfig();
                 break;
             case 'action':
                 // Action buttons rendered inside chat bubbles
@@ -190,10 +327,13 @@ export class VectraChatPanel {
                 // active workspace folder.
                 void this.openSource(m.path, m.line);
                 break;
+            case 'saveSession':
+                void this.handleSaveSession(m);
+                break;
         }
     }
 
-    private postConfig(): void {
+    private async postConfig(): Promise<void> {
         const cfg = vscode.workspace.getConfiguration('vectra');
         this.post({
             type: 'config',
@@ -201,7 +341,24 @@ export class VectraChatPanel {
             defaultModel: cfg.get<string>('claudeModel', ''),
             defaultEffort: cfg.get<string>('effort', ''),
             defaultTopK: cfg.get<number>('topK', 0),
+            indexExists: await this.checkIndexExists(),
         });
+    }
+
+    // Probe <workspace>/.vectra/index.db. Used by the empty-state
+    // CTA so it only suggests "Index this workspace" when there
+    // really is no index — otherwise the prompt confuses returning
+    // users into thinking their previous index was lost.
+    private async checkIndexExists(): Promise<boolean> {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) return false;
+        const indexUri = vscode.Uri.joinPath(folder.uri, '.vectra', 'index.db');
+        try {
+            await vscode.workspace.fs.stat(indexUri);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     private workspaceRoot(): string | undefined {
@@ -673,6 +830,13 @@ export class VectraChatPanel {
 </body>
 </html>`;
     }
+}
+
+// Trim a session title for the panel tab — VS Code's tab strip
+// gets cramped fast, so we cap at ~32 visible chars.
+function truncateForTitle(s: string): string {
+    const cleaned = s.replace(/\s+/g, ' ').trim();
+    return cleaned.length <= 32 ? cleaned : cleaned.slice(0, 31) + '…';
 }
 
 function randomNonce(): string {

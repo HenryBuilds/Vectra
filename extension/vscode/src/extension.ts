@@ -15,6 +15,7 @@
 import * as cp from 'child_process';
 import * as vscode from 'vscode';
 
+import { ChatStorage } from './chatStorage';
 import { VectraChatPanel } from './chatProvider';
 
 const OUTPUT_CHANNEL_NAME = 'Vectra';
@@ -192,6 +193,12 @@ async function commandIndex(output: vscode.OutputChannel): Promise<void> {
 
 export function activate(context: vscode.ExtensionContext): void {
     const output = vscode.window.createOutputChannel(OUTPUT_CHANNEL_NAME);
+    // globalStorageUri is per-extension persistent storage that
+    // survives reloads, machine reboots, and (intentionally)
+    // workspace switches. Each workspace gets its own subdirectory
+    // inside via ChatStorage's path hash, so two projects never
+    // see each other's chat history.
+    const storage = new ChatStorage(context.globalStorageUri);
 
     context.subscriptions.push(
         output,
@@ -201,8 +208,11 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
         vscode.commands.registerCommand('vectra.index', () => commandIndex(output)),
         vscode.commands.registerCommand('vectra.newChat', () => VectraChatPanel.newChat()),
+        vscode.commands.registerCommand('vectra.showHistory', () =>
+            VectraChatPanel.showHistory(),
+        ),
         vscode.commands.registerCommand('vectra.openChat', () => {
-            VectraChatPanel.createOrShow(context.extensionUri);
+            VectraChatPanel.createOrShow(context.extensionUri, storage);
         }),
     );
 }

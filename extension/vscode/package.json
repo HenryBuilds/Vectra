@@ -2,7 +2,7 @@
   "name": "vectra-vscode",
   "displayName": "Vectra",
   "description": "Local-first code RAG dispatch to Claude Code",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "vectra",
   "license": "Apache-2.0",
   "repository": {
@@ -43,6 +43,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "vectra.showHistory",
+        "title": "Switch session…",
+        "category": "Vectra",
+        "icon": "$(history)"
+      },
+      {
         "command": "vectra.openChat",
         "title": "Vectra: Open chat",
         "category": "Vectra",
@@ -67,9 +73,14 @@
           "group": "navigation@100"
         },
         {
-          "command": "vectra.newChat",
+          "command": "vectra.showHistory",
           "when": "activeWebviewPanelId == 'vectra.chat'",
           "group": "navigation@1"
+        },
+        {
+          "command": "vectra.newChat",
+          "when": "activeWebviewPanelId == 'vectra.chat'",
+          "group": "navigation@2"
         }
       ]
     },
