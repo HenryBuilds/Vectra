@@ -62,6 +62,58 @@ namespace fs = std::filesystem;
 
 }  // namespace
 
+std::string json_escape(std::string_view s) {
+    std::string out;
+    out.reserve(s.size() + 2);
+    for (char c : s) {
+        switch (c) {
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    out += fmt::format("\\u{:04x}", static_cast<unsigned char>(c));
+                } else {
+                    out += c;
+                }
+        }
+    }
+    return out;
+}
+
+std::string format_context_event(const std::vector<ContextChunk>& chunks) {
+    std::string out;
+    out.reserve(64 + chunks.size() * 96);
+    out += R"({"type":"vectra_event","subtype":"context","chunks":[)";
+    for (std::size_t i = 0; i < chunks.size(); ++i) {
+        if (i > 0) {
+            out += ',';
+        }
+        const auto& c = chunks[i];
+        out += fmt::format(
+            R"({{"file":"{}","start_line":{},"end_line":{},"symbol":"{}","kind":"{}"}})",
+            json_escape(c.file_path),
+            c.start_line,
+            c.end_line,
+            json_escape(c.symbol),
+            json_escape(c.kind));
+    }
+    out += "]}\n";
+    return out;
+}
+
 std::string compose_prompt(const PromptComposition& comp) {
     std::string out;
     out.reserve(256 + comp.task.size());

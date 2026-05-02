@@ -88,4 +88,35 @@ struct ClaudeInvocation {
 // itself failed.
 [[nodiscard]] int run_claude(const ClaudeInvocation& inv, std::ostream& out);
 
+// JSON string escape used by the stream-json wire format. Hand-
+// rolled rather than pulling in a JSON library because we emit
+// exactly one event shape (vectra_event/context) and the surface
+// area is too small to justify a dependency. Pure function — no
+// IO, deterministic, easily tested.
+//
+// Escapes:
+//   "  -> \"
+//   \  -> \\
+//   \n -> \n   (literal two-char sequence)
+//   \r -> \r
+//   \t -> \t
+//   any byte < 0x20 -> \u00XX
+// Other bytes (including UTF-8 continuation bytes >= 0x80) pass
+// through unchanged.
+[[nodiscard]] std::string json_escape(std::string_view s);
+
+// Render a stream-json `vectra_event` carrying the chunks claude
+// received as context, as a single newline-terminated JSON line.
+// Pure function — emit_context_event() in ask_command.cpp simply
+// writes this string to stdout. Shape:
+//
+//   {"type":"vectra_event","subtype":"context","chunks":[
+//     {"file":"...","start_line":N,"end_line":N,"symbol":"...","kind":"..."},
+//     ...
+//   ]}\n
+//
+// An empty input yields a well-formed event with an empty chunks
+// array; the caller can blindly emit it without a special-case.
+[[nodiscard]] std::string format_context_event(const std::vector<ContextChunk>& chunks);
+
 }  // namespace vectra::cli

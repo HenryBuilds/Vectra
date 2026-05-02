@@ -57,65 +57,14 @@ namespace fs = std::filesystem;
     return c;
 }
 
-// Minimal JSON string escape — vectra's stream-json output
-// piggybacks on the same NDJSON line format claude uses, so we
-// hand-roll a string escaper rather than pulling in a JSON library
-// just for one event. Backslash and double-quote are the only
-// printable chars that need escaping; the standard control-char
-// range gets the \uXXXX treatment so a stray newline in a symbol
-// name (paranoid case) does not break the JSON line. Repo-relative
-// file paths on Windows can contain backslashes, hence the
-// dedicated case.
-[[nodiscard]] std::string json_escape(std::string_view s) {
-    std::string out;
-    out.reserve(s.size() + 2);
-    for (char c : s) {
-        switch (c) {
-            case '"':
-                out += "\\\"";
-                break;
-            case '\\':
-                out += "\\\\";
-                break;
-            case '\n':
-                out += "\\n";
-                break;
-            case '\r':
-                out += "\\r";
-                break;
-            case '\t':
-                out += "\\t";
-                break;
-            default:
-                if (static_cast<unsigned char>(c) < 0x20) {
-                    out += fmt::format("\\u{:04x}", static_cast<unsigned char>(c));
-                } else {
-                    out += c;
-                }
-        }
-    }
-    return out;
-}
-
-// One-shot NDJSON line announcing the chunks claude received as
-// context. Emitted on stdout *before* spawning claude, so a UI
-// client parsing the stream can pre-render a "Sources" footer
-// that fills in while claude streams its answer below.
+// Emit the stream-json `vectra_event/context` line on stdout
+// before spawning claude, so a UI client parsing the stream can
+// pre-render a Sources footer while claude is still composing.
+// The pure formatter lives in claude_subprocess.cpp where it is
+// reachable from the test harness.
 void emit_context_event(const std::vector<ContextChunk>& chunks) {
-    fmt::print(R"({{"type":"vectra_event","subtype":"context","chunks":[)");
-    for (std::size_t i = 0; i < chunks.size(); ++i) {
-        if (i > 0) {
-            fmt::print(",");
-        }
-        const auto& c = chunks[i];
-        fmt::print(R"({{"file":"{}","start_line":{},"end_line":{},"symbol":"{}","kind":"{}"}})",
-                   json_escape(c.file_path),
-                   c.start_line,
-                   c.end_line,
-                   json_escape(c.symbol),
-                   json_escape(c.kind));
-    }
-    fmt::print("]}}\n");
+    const auto line = format_context_event(chunks);
+    std::fputs(line.c_str(), stdout);
     std::fflush(stdout);
 }
 
