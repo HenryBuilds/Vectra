@@ -318,12 +318,29 @@ function approveLabel(toolName: string): string {
     }
 }
 
+// Age counter displayed in the modal header. The bridge auto-denies
+// after 90s so the user knows there is a deadline; rendering the
+// elapsed seconds plays the same role as Claude Code's own
+// "waiting…" indicator and keeps the user from wondering whether
+// the approval actually went through.
+function useElapsedSeconds(): number {
+    const [start] = React.useState(() => Date.now());
+    const [now, setNow] = React.useState(start);
+    React.useEffect(() => {
+        const t = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(t);
+    }, []);
+    return Math.floor((now - start) / 1000);
+}
+
 export function PermissionModal({ request, onApprove, onDeny }: PermissionModalProps) {
+    const seconds = useElapsedSeconds();
     return (
         <div className="permission-modal" role="dialog" aria-modal="true">
             <div className="permission-header">
                 <span className="permission-tool">{request.toolName || 'tool'}</span>
                 <span className="permission-prompt">requests permission</span>
+                {seconds >= 5 && <span className="permission-age">{seconds}s</span>}
             </div>
             <div className="permission-body">
                 {renderPreview(request.toolName, request.toolInput)}

@@ -40,6 +40,15 @@ export interface PermissionResponse {
 
 type Resolver = (response: PermissionResponse) => void;
 
+// Hard upper bound on how long a single approval can sit on screen
+// before we auto-deny it. Without this an unanswered modal pins the
+// underlying claude run forever — claude never times out the MCP
+// call from its end (or it times out so far in the future the user
+// has long since written off the chat as "broken"). 90s is a
+// compromise: long enough to read a moderate diff and decide, short
+// enough that walking away from the desk recovers a usable panel.
+const REQUEST_TIMEOUT_MS = 90_000;
+
 export class PermissionBridge implements vscode.Disposable {
     private readonly server: http.Server;
     private readonly token: string;
@@ -194,9 +203,27 @@ export class PermissionBridge implements vscode.Disposable {
                 `incoming approval ${requestId} tool=${request.toolName} useId=${request.toolUseId}`,
             );
 
+            // Auto-deny timer: if no decision arrives within
+            // REQUEST_TIMEOUT_MS we settle the request as a deny
+            // with a clear message so the user knows why claude
+            // gave up. Cleared by either resolve() or req.on('close').
+            let timer: NodeJS.Timeout | undefined = setTimeout(() => {
+                if (this.pending.has(requestId)) {
+                    this.log(`timeout ${requestId} after ${REQUEST_TIMEOUT_MS}ms — auto-deny`);
+                    this.resolve(requestId, {
+                        decision: 'deny',
+                        reason: `vectra: no decision after ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s — auto-denied`,
+                    });
+                }
+            }, REQUEST_TIMEOUT_MS);
+
             // Stash the resolver so chatProvider can settle it once
             // the webview produces a decision.
             this.pending.set(requestId, (response) => {
+                if (timer !== undefined) {
+                    clearTimeout(timer);
+                    timer = undefined;
+                }
                 this.log(
                     `flushing HTTP response ${requestId} decision=${response.decision}`,
                 );
@@ -209,6 +236,10 @@ export class PermissionBridge implements vscode.Disposable {
             // pending entry so the in-flight modal becomes a no-op
             // when the user finally clicks.
             req.on('close', () => {
+                if (timer !== undefined) {
+                    clearTimeout(timer);
+                    timer = undefined;
+                }
                 if (this.pending.has(requestId)) {
                     this.pending.delete(requestId);
                 }

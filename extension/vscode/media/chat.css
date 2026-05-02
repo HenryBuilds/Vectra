@@ -658,6 +658,14 @@ button.source-item:focus {
     color: var(--vscode-descriptionForeground);
 }
 
+.permission-age {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    font-family: var(--vscode-editor-font-family, monospace);
+    opacity: 0.7;
+}
+
 .permission-body {
     padding: 4px 12px 8px 12px;
     font-size: 12px;
