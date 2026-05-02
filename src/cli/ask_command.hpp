@@ -72,6 +72,14 @@ struct AskOptions {
     // claude on its default".
     std::string claude_effort;
 
+    // Forwarded as `--permission-mode <value>`. Accepts the full set
+    // claude understands: "default" (ask before each edit),
+    // "acceptEdits" (auto-accept file edits, ask for shell/MCP),
+    // "plan" (explore only, no edits), "bypassPermissions" (no
+    // approvals at all). Empty means "use the wrapper's safe
+    // default" — see the resolve step in ask_command.cpp.
+    std::string claude_permission_mode;
+
     // Forwarded after the model/effort flags. Useful for anything the
     // dedicated knobs don't cover: --max-turns N, --allowedTools, ...
     std::vector<std::string> claude_extra_args;

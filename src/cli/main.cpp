@@ -178,6 +178,14 @@ int main(int argc, char** argv) {
                         ask_opts.claude_effort,
                         "Thinking budget passed as `--effort` to `claude -p` "
                         "(low / medium / high)");
+    ask_cmd
+        ->add_option("--permission-mode",
+                     ask_opts.claude_permission_mode,
+                     "Permission mode passed to `claude -p`: default (ask before "
+                     "each edit), acceptEdits (auto-accept file edits), plan "
+                     "(explore only, no edits), bypassPermissions (skip every "
+                     "approval). Empty = wrapper picks acceptEdits.")
+        ->check(CLI::IsMember({"default", "acceptEdits", "plan", "bypassPermissions"}));
     ask_cmd->add_option("--claude-arg",
                         ask_opts.claude_extra_args,
                         "Extra flag passed through to `claude -p` (repeatable)");

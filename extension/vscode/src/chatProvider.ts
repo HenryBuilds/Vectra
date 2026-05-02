@@ -390,6 +390,14 @@ export class VectraChatPanel {
         if (m.effort && m.effort.length > 0) {
             args.push('--effort', m.effort);
         }
+        // Forward the permission mode from the workspace setting. The
+        // chat panel reads it once per send rather than caching at
+        // construction time so a mode flip in Settings takes effect
+        // on the very next message without reloading the webview.
+        const permissionMode = cfg.get<string>('permissionMode', '').trim();
+        if (permissionMode) {
+            args.push('--permission-mode', permissionMode);
+        }
         // First turn assigns the session id; every subsequent turn
         // resumes it so claude sees the prior transcript on disk.
         if (this.hasSentTurn) {

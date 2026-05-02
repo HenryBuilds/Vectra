@@ -26,6 +26,7 @@ interface AskFlags {
     claudeModel?: string;
     effort?: string;
     topK?: number;
+    permissionMode?: string;
 }
 
 function readSettings(): { binary: string; flags: AskFlags } {
@@ -34,12 +35,14 @@ function readSettings(): { binary: string; flags: AskFlags } {
     const claudeModel = config.get<string>('claudeModel', '').trim();
     const effort = config.get<string>('effort', '').trim();
     const topK = config.get<number>('topK', 0);
+    const permissionMode = config.get<string>('permissionMode', '').trim();
     return {
         binary,
         flags: {
             claudeModel: claudeModel || undefined,
             effort: effort || undefined,
             topK: topK > 0 ? topK : undefined,
+            permissionMode: permissionMode || undefined,
         },
     };
 }
@@ -127,6 +130,9 @@ function buildAskArgs(task: string, flags: AskFlags): string[] {
     }
     if (flags.effort) {
         args.push('--effort', flags.effort);
+    }
+    if (flags.permissionMode) {
+        args.push('--permission-mode', flags.permissionMode);
     }
     return args;
 }

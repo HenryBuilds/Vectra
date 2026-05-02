@@ -123,6 +123,23 @@
           "maximum": 50,
           "markdownDescription": "Number of context chunks to surface per ask. 0 = use config / built-in default of 8."
         },
+        "vectra.permissionMode": {
+          "type": "string",
+          "default": "acceptEdits",
+          "enum": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "bypassPermissions"
+          ],
+          "enumDescriptions": [
+            "Ask before each edit (claude prompts; safest for unfamiliar code).",
+            "Auto-accept file edits in the working tree; Bash / MCP still require approval.",
+            "Explore-only — claude reads, plans and explains but does not modify any file.",
+            "Bypass every approval, including Bash and MCP. Use only in disposable environments."
+          ],
+          "markdownDescription": "Permission mode forwarded to `claude -p` as `--permission-mode`. Mirrors Claude Code's mode picker. Default `acceptEdits` matches the wrapper's safe default."
+        },
         "vectra.autoIndex": {
           "type": "boolean",
           "default": true,

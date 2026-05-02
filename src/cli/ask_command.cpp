@@ -142,6 +142,9 @@ int run_ask(const AskOptions& opts) {
     if (resolved.claude_effort.empty()) {
         resolved.claude_effort = project_cfg.claude_effort;
     }
+    if (resolved.claude_permission_mode.empty()) {
+        resolved.claude_permission_mode = project_cfg.claude_permission_mode;
+    }
     if (resolved.claude_extra_args.empty()) {
         resolved.claude_extra_args = project_cfg.claude_extra_args;
     }
@@ -318,22 +321,28 @@ int run_ask(const AskOptions& opts) {
         inv.extra_args.push_back("--verbose");
     }
 
-    // Default to acceptEdits so file modifications go through without
-    // hanging on a permission prompt that has no UI to answer in
-    // `claude -p`. acceptEdits auto-accepts Edit / Write and common
-    // filesystem commands (mkdir, touch, mv, cp, …) within the working
-    // tree; Bash and MCP tools still require explicit approval. Skip
-    // the default if the caller already passed --permission-mode (or
-    // its alias --dangerously-skip-permissions) via --claude-arg, so
-    // an explicit choice always wins.
-    const bool user_set_permission_mode = std::any_of(
+    // Decide what `--permission-mode` to forward. Precedence:
+    //   1. explicit --permission-mode / --dangerously-skip-permissions
+    //      passed through --claude-arg — caller knows what they want
+    //   2. the resolved value (CLI flag / project config / extension
+    //      setting) when non-empty
+    //   3. fall back to "acceptEdits" so file modifications go through
+    //      without hanging on a permission prompt that has no UI to
+    //      answer in `claude -p`.
+    // acceptEdits auto-accepts Edit / Write and common filesystem
+    // commands (mkdir, touch, mv, cp, …) within the working tree;
+    // Bash and MCP tools still require explicit approval.
+    const bool user_set_permission_mode_via_extra = std::any_of(
         resolved.claude_extra_args.begin(), resolved.claude_extra_args.end(), [](const auto& a) {
             return a == "--permission-mode" || a == "--dangerously-skip-permissions" ||
                    a.starts_with("--permission-mode=");
         });
-    if (!user_set_permission_mode) {
+    if (!user_set_permission_mode_via_extra) {
+        const std::string mode = resolved.claude_permission_mode.empty()
+                                     ? "acceptEdits"
+                                     : resolved.claude_permission_mode;
         inv.extra_args.push_back("--permission-mode");
-        inv.extra_args.push_back("acceptEdits");
+        inv.extra_args.push_back(mode);
     }
 
     for (const auto& a : resolved.claude_extra_args) {

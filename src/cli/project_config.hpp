@@ -39,6 +39,7 @@ struct ProjectConfig {
     std::string claude_binary;
     std::string claude_model;
     std::string claude_effort;
+    std::string claude_permission_mode;
     std::vector<std::string> claude_extra_args;
 };
 
