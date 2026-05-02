@@ -73,6 +73,18 @@ std::string fixture_for(std::string_view language) {
         return "sample.php";
     if (language == "markdown")
         return "sample.md";
+    if (language == "json")
+        return "sample.json";
+    if (language == "yaml")
+        return "sample.yaml";
+    if (language == "toml")
+        return "sample.toml";
+    if (language == "dockerfile")
+        return "sample.dockerfile";
+    if (language == "hcl")
+        return "sample.tf";
+    if (language == "make")
+        return "sample.mk";
     return {};
 }
 
@@ -104,7 +116,13 @@ TEST_CASE("chunks query yields at least one chunk for each language fixture", "[
                                     "bash",
                                     "kotlin",
                                     "php",
-                                    "markdown");
+                                    "markdown",
+                                    "json",
+                                    "yaml",
+                                    "toml",
+                                    "dockerfile",
+                                    "hcl",
+                                    "make");
 
     INFO("language: " << language);
 
@@ -139,7 +157,13 @@ TEST_CASE("symbols and imports queries compile cleanly for each language", "[lan
                                     "bash",
                                     "kotlin",
                                     "php",
-                                    "markdown");
+                                    "markdown",
+                                    "json",
+                                    "yaml",
+                                    "toml",
+                                    "dockerfile",
+                                    "hcl",
+                                    "make");
 
     INFO("language: " << language);
 

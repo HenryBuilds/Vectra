@@ -18,6 +18,12 @@ const TSLanguage* tree_sitter_bash();
 const TSLanguage* tree_sitter_kotlin();
 const TSLanguage* tree_sitter_php();
 const TSLanguage* tree_sitter_markdown();
+const TSLanguage* tree_sitter_json();
+const TSLanguage* tree_sitter_yaml();
+const TSLanguage* tree_sitter_toml();
+const TSLanguage* tree_sitter_dockerfile();
+const TSLanguage* tree_sitter_hcl();
+const TSLanguage* tree_sitter_make();
 }  // extern "C"
 
 namespace vectra::core::detail {
@@ -57,6 +63,18 @@ const TSLanguage* grammar_by_symbol(std::string_view symbol) noexcept {
         return tree_sitter_php();
     if (symbol == "tree_sitter_markdown")
         return tree_sitter_markdown();
+    if (symbol == "tree_sitter_json")
+        return tree_sitter_json();
+    if (symbol == "tree_sitter_yaml")
+        return tree_sitter_yaml();
+    if (symbol == "tree_sitter_toml")
+        return tree_sitter_toml();
+    if (symbol == "tree_sitter_dockerfile")
+        return tree_sitter_dockerfile();
+    if (symbol == "tree_sitter_hcl")
+        return tree_sitter_hcl();
+    if (symbol == "tree_sitter_make")
+        return tree_sitter_make();
     return nullptr;
 }
 

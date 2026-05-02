@@ -1,0 +1,16 @@
+# Minimal YAML fixture for language parse-validation tests.
+
+name: demo-pipeline
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        run: git fetch
+      - name: Test
+        run: make test

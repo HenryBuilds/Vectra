@@ -21,26 +21,15 @@ TEST_CASE("registry loads languages.toml without throwing", "[language]") {
     REQUIRE_NOTHROW(load_repo_registry());
 }
 
-TEST_CASE("registry exposes all fifteen built-in languages", "[language]") {
+TEST_CASE("registry exposes all twenty-one built-in languages", "[language]") {
     const auto registry = load_repo_registry();
 
-    REQUIRE(registry.all().size() == 15);
+    REQUIRE(registry.all().size() == 21);
 
-    for (const auto* name : {"c",
-                             "cpp",
-                             "python",
-                             "javascript",
-                             "typescript",
-                             "tsx",
-                             "rust",
-                             "go",
-                             "java",
-                             "ruby",
-                             "csharp",
-                             "bash",
-                             "kotlin",
-                             "php",
-                             "markdown"}) {
+    for (const auto* name :
+         {"c",        "cpp",  "python", "javascript", "typescript", "tsx",    "rust",
+          "go",       "java", "ruby",   "csharp",     "bash",       "kotlin", "php",
+          "markdown", "json", "yaml",   "toml",       "dockerfile", "hcl",    "make"}) {
         const auto* lang = registry.by_name(name);
         REQUIRE(lang != nullptr);
         REQUIRE(lang->ts_language != nullptr);
@@ -63,6 +52,14 @@ TEST_CASE("by_extension resolves the newly added languages", "[language]") {
     REQUIRE(registry.by_extension("phtml")->name == "php");
     REQUIRE(registry.by_extension("md")->name == "markdown");
     REQUIRE(registry.by_extension("markdown")->name == "markdown");
+    REQUIRE(registry.by_extension("json")->name == "json");
+    REQUIRE(registry.by_extension("yaml")->name == "yaml");
+    REQUIRE(registry.by_extension("yml")->name == "yaml");
+    REQUIRE(registry.by_extension("toml")->name == "toml");
+    REQUIRE(registry.by_extension("dockerfile")->name == "dockerfile");
+    REQUIRE(registry.by_extension("tf")->name == "hcl");
+    REQUIRE(registry.by_extension("hcl")->name == "hcl");
+    REQUIRE(registry.by_extension("mk")->name == "make");
 }
 
 TEST_CASE("by_extension resolves by file extension, case-insensitively", "[language]") {

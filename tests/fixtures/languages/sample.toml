@@ -1,0 +1,16 @@
+# Minimal TOML fixture for language parse-validation tests.
+
+title = "Demo"
+version = "0.1.0"
+
+[package]
+name = "demo"
+edition = "2021"
+
+[dependencies]
+serde = "1"
+tokio = { version = "1", features = ["full"] }
+
+[[bin]]
+name = "demo"
+path = "src/main.rs"

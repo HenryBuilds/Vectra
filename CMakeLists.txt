@@ -175,6 +175,12 @@ set(VECTRA_GRAMMARS
     "csharp"
     "bash"
     "kotlin"
+    "json"
+    "yaml"
+    "toml"
+    "dockerfile"
+    "hcl"
+    "make"
 )
 foreach(_lang IN LISTS VECTRA_GRAMMARS)
     add_tree_sitter_grammar(

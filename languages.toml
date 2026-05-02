@@ -173,3 +173,76 @@ symbol      = "tree_sitter_markdown"
 chunks      = "queries/markdown/chunks.scm"
 symbols     = "queries/markdown/symbols.scm"
 imports     = "queries/markdown/imports.scm"
+
+# ---------------------------------------------------------------------------
+# Configuration / data formats. These do not parse "code" in the
+# traditional sense, but for a code-RAG use case the surrounding
+# manifests carry load-bearing context (deps, build flags, CI shape)
+# that retrieval should be able to land on directly.
+# ---------------------------------------------------------------------------
+
+[[language]]
+name        = "json"
+extensions  = ["json", "jsonc", "json5"]
+grammar_dir = "third_party/grammars/tree-sitter-json"
+symbol      = "tree_sitter_json"
+chunks      = "queries/json/chunks.scm"
+symbols     = "queries/json/symbols.scm"
+imports     = "queries/json/imports.scm"
+
+[[language]]
+name        = "yaml"
+extensions  = ["yaml", "yml"]
+grammar_dir = "third_party/grammars/tree-sitter-yaml"
+symbol      = "tree_sitter_yaml"
+chunks      = "queries/yaml/chunks.scm"
+symbols     = "queries/yaml/symbols.scm"
+imports     = "queries/yaml/imports.scm"
+
+[[language]]
+name        = "toml"
+extensions  = ["toml"]
+grammar_dir = "third_party/grammars/tree-sitter-toml"
+symbol      = "tree_sitter_toml"
+chunks      = "queries/toml/chunks.scm"
+symbols     = "queries/toml/symbols.scm"
+imports     = "queries/toml/imports.scm"
+
+# Dockerfile uses an unusual convention: the file is conventionally
+# named `Dockerfile` (no extension) or `*.dockerfile`. We register
+# the extension form here; matching by stem is a separate concern
+# above the language layer (the walker would need a filename-to-
+# language fallback).
+[[language]]
+name        = "dockerfile"
+extensions  = ["dockerfile"]
+grammar_dir = "third_party/grammars/tree-sitter-dockerfile"
+symbol      = "tree_sitter_dockerfile"
+chunks      = "queries/dockerfile/chunks.scm"
+symbols     = "queries/dockerfile/symbols.scm"
+imports     = "queries/dockerfile/imports.scm"
+
+# HCL covers Terraform (.tf, .tfvars), Packer (.pkr.hcl), Nomad and
+# other HashiCorp tooling. The grammar is shape-only — it does not
+# embed Terraform's resource-name conventions.
+[[language]]
+name        = "hcl"
+extensions  = ["hcl", "tf", "tfvars"]
+grammar_dir = "third_party/grammars/tree-sitter-hcl"
+symbol      = "tree_sitter_hcl"
+chunks      = "queries/hcl/chunks.scm"
+symbols     = "queries/hcl/symbols.scm"
+imports     = "queries/hcl/imports.scm"
+
+# Makefile shares the stem-not-extension caveat with Dockerfile: the
+# canonical name is `Makefile`. We register `.mk` and `.mak` here for
+# the cases that DO use extensions; stem-based fallback is again a
+# walker-layer concern.
+[[language]]
+name        = "make"
+extensions  = ["mk", "mak"]
+grammar_dir = "third_party/grammars/tree-sitter-make"
+symbol      = "tree_sitter_make"
+chunks      = "queries/make/chunks.scm"
+symbols     = "queries/make/symbols.scm"
+imports     = "queries/make/imports.scm"
