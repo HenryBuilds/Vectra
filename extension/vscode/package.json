@@ -39,6 +39,11 @@
         "category": "Vectra"
       },
       {
+        "command": "vectra.reindexWithModel",
+        "title": "Vectra: Re-index with model…",
+        "category": "Vectra"
+      },
+      {
         "command": "vectra.newChat",
         "title": "New chat",
         "category": "Vectra",
@@ -151,6 +156,36 @@
           "minimum": 200,
           "maximum": 30000,
           "markdownDescription": "Quiet period in milliseconds after a file change before auto-indexing fires. Bursts (multi-file saves, git checkouts) collapse into a single index run."
+        },
+        "vectra.indexModel": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "qwen3-embed-0.6b",
+            "qwen3-embed-4b",
+            "qwen3-embed-8b"
+          ],
+          "enumDescriptions": [
+            "Symbol-only index — no embeddings, falls back to FTS5 + tree-sitter symbols. Smallest DB, no GPU / model download required.",
+            "Qwen3 0.6B local GGUF (1024-dim). Fast on CPU, good baseline.",
+            "Qwen3 4B local GGUF (2560-dim). Higher recall, needs ~8 GB VRAM or modern CPU.",
+            "Qwen3 8B local GGUF (4096-dim). Highest recall, needs ~16 GB VRAM."
+          ],
+          "markdownDescription": "Embedding model passed to `vectra index` and `vectra ask`. Changing this requires a re-index against the new model; use the **Vectra: Re-index with model…** command to switch cleanly. Empty = symbol-only index."
+        },
+        "vectra.reranker": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "qwen3-rerank-0.6b"
+          ],
+          "enumDescriptions": [
+            "No reranker. Hybrid retrieval (BM25 + embeddings + RRF) only.",
+            "Qwen3-Rerank 0.6B cross-encoder. Re-orders the top-k hits for better relevance at the cost of one extra model load."
+          ],
+          "markdownDescription": "Cross-encoder reranker passed to `vectra ask`. Optional; reranking applies only to retrieval, the index itself is unaffected — flipping this on/off does not require a re-index."
         }
       }
     }

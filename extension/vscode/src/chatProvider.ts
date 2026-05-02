@@ -454,6 +454,8 @@ export class VectraChatPanel {
             defaultEffort: cfg.get<string>('effort', ''),
             defaultTopK: cfg.get<number>('topK', 0),
             indexExists: await this.checkIndexExists(),
+            indexModel: cfg.get<string>('indexModel', ''),
+            reranker: cfg.get<string>('reranker', ''),
         });
     }
 
@@ -495,6 +497,19 @@ export class VectraChatPanel {
         const args: string[] = ['ask', m.text];
         if (m.topK && m.topK > 0) {
             args.push('-k', String(m.topK));
+        }
+        // Retrieval-side knobs come from workspace settings (the
+        // chat panel doesn't expose a per-message picker for those —
+        // they're project-wide and stable across turns). Forward
+        // when set so the embedding / rerank stays consistent with
+        // whatever the workspace was indexed against.
+        const indexModel = cfg.get<string>('indexModel', '').trim();
+        if (indexModel.length > 0) {
+            args.push('--model', indexModel);
+        }
+        const reranker = cfg.get<string>('reranker', '').trim();
+        if (reranker.length > 0) {
+            args.push('--reranker', reranker);
         }
         if (m.model && m.model.length > 0) {
             args.push('--claude-model', m.model);

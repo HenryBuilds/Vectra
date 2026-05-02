@@ -28,6 +28,8 @@ interface AskFlags {
     effort?: string;
     topK?: number;
     permissionMode?: string;
+    indexModel?: string;
+    reranker?: string;
 }
 
 function readSettings(): { binary: string; flags: AskFlags } {
@@ -37,6 +39,8 @@ function readSettings(): { binary: string; flags: AskFlags } {
     const effort = config.get<string>('effort', '').trim();
     const topK = config.get<number>('topK', 0);
     const permissionMode = config.get<string>('permissionMode', '').trim();
+    const indexModel = config.get<string>('indexModel', '').trim();
+    const reranker = config.get<string>('reranker', '').trim();
     return {
         binary,
         flags: {
@@ -44,6 +48,8 @@ function readSettings(): { binary: string; flags: AskFlags } {
             effort: effort || undefined,
             topK: topK > 0 ? topK : undefined,
             permissionMode: permissionMode || undefined,
+            indexModel: indexModel || undefined,
+            reranker: reranker || undefined,
         },
     };
 }
@@ -126,6 +132,15 @@ function buildAskArgs(task: string, flags: AskFlags): string[] {
     if (flags.topK !== undefined) {
         args.push('-k', String(flags.topK));
     }
+    // The retrieval-side knobs go before the claude-side knobs so
+    // `vectra ask --help` examples read naturally; argparse order
+    // doesn't matter in practice.
+    if (flags.indexModel) {
+        args.push('--model', flags.indexModel);
+    }
+    if (flags.reranker) {
+        args.push('--reranker', flags.reranker);
+    }
     if (flags.claudeModel) {
         args.push('--claude-model', flags.claudeModel);
     }
@@ -191,6 +206,21 @@ async function commandAskAboutSelection(output: vscode.OutputChannel): Promise<v
     await runVectra(buildAskArgs(task, flags), cwd, output, 'Vectra is asking Claude Code…');
 }
 
+// Build the argv for `vectra index .`. Pulls the active embedding
+// model setting so manual + auto + reindex-with-model all stay in
+// sync.
+function buildIndexArgs(): string[] {
+    const args = ['index', '.'];
+    const indexModel = vscode.workspace
+        .getConfiguration('vectra')
+        .get<string>('indexModel', '')
+        .trim();
+    if (indexModel.length > 0) {
+        args.push('--model', indexModel);
+    }
+    return args;
+}
+
 async function commandIndex(output: vscode.OutputChannel): Promise<void> {
     const cwd = workspaceRoot();
     if (!cwd) {
@@ -208,7 +238,89 @@ async function commandIndex(output: vscode.OutputChannel): Promise<void> {
     }
     const release = await indexLock.acquire();
     try {
-        await runVectra(['index', '.'], cwd, output, 'Vectra is indexing the workspace…');
+        await runVectra(buildIndexArgs(), cwd, output, 'Vectra is indexing the workspace…');
+    } finally {
+        release();
+    }
+}
+
+// Embedding-model picker. Shows the known model entries plus a
+// "Symbol-only" option, persists the user's pick to
+// vectra.indexModel (Workspace scope), and triggers a fresh
+// re-index against the new model. The Workspace scope is
+// deliberate: index choice is per-project (a small Cursor-style
+// repo wants 0.6b, a heavy monorepo might want 4b), and a
+// User-scope default would lock everyone to the same model.
+async function commandReindexWithModel(output: vscode.OutputChannel): Promise<void> {
+    const cwd = workspaceRoot();
+    if (!cwd) {
+        vscode.window.showErrorMessage('Vectra needs an open workspace folder.');
+        return;
+    }
+
+    type Item = vscode.QuickPickItem & { value: string };
+    const items: Item[] = [
+        {
+            label: 'Symbol-only',
+            description: 'no embeddings, FTS5 + tree-sitter symbols only',
+            detail: 'Smallest DB. No GPU / model download required.',
+            value: '',
+        },
+        {
+            label: 'qwen3-embed-0.6b',
+            description: '1024-dim · ~600 MB · CPU-friendly',
+            detail: 'Good baseline for most repos. Fast indexing.',
+            value: 'qwen3-embed-0.6b',
+        },
+        {
+            label: 'qwen3-embed-4b',
+            description: '2560-dim · ~3 GB · ~8 GB VRAM',
+            detail: 'Higher recall on conceptual queries.',
+            value: 'qwen3-embed-4b',
+        },
+        {
+            label: 'qwen3-embed-8b',
+            description: '4096-dim · ~6 GB · ~16 GB VRAM',
+            detail: 'Highest recall. Indexing is slower; use only on big projects with a strong GPU.',
+            value: 'qwen3-embed-8b',
+        },
+    ];
+    const current = vscode.workspace
+        .getConfiguration('vectra')
+        .get<string>('indexModel', '')
+        .trim();
+    const picked = await vscode.window.showQuickPick(
+        items.map((i) => ({
+            ...i,
+            description: i.value === current ? `${i.description} · current` : i.description,
+        })),
+        {
+            title: 'Vectra: re-index with embedding model',
+            placeHolder: 'pick the model the new index should use',
+            matchOnDescription: true,
+            matchOnDetail: true,
+        },
+    );
+    if (!picked) return;
+
+    // Persist BEFORE running so the auto-indexer (and every later
+    // command) picks up the new value immediately.
+    await vscode.workspace
+        .getConfiguration('vectra')
+        .update('indexModel', picked.value, vscode.ConfigurationTarget.Workspace);
+
+    output.appendLine(
+        `[vectra: switched index model to ${picked.value || '(symbol-only)'}; running fresh index]`,
+    );
+
+    const release = await indexLock.acquire();
+    try {
+        await runVectra(
+            buildIndexArgs(),
+            cwd,
+            output,
+            `Vectra is re-indexing with ${picked.label}…`,
+        );
     } finally {
         release();
     }
@@ -249,6 +361,9 @@ export function activate(context: vscode.ExtensionContext): void {
             commandAskAboutSelection(output),
         ),
         vscode.commands.registerCommand('vectra.index', () => commandIndex(output)),
+        vscode.commands.registerCommand('vectra.reindexWithModel', () =>
+            commandReindexWithModel(output),
+        ),
         vscode.commands.registerCommand('vectra.newChat', () => VectraChatPanel.newChat()),
         vscode.commands.registerCommand('vectra.showHistory', () =>
             VectraChatPanel.showHistory(),

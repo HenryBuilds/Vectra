@@ -155,11 +155,23 @@ export class AutoIndexer implements vscode.Disposable {
 
     private spawnIndex(): Promise<void> {
         const binary = this.resolveBinary();
+        // Pull the embedding model setting on every spawn so a flip
+        // in Settings takes effect on the very next reindex without
+        // a window reload. Empty / missing → no --model, the CLI
+        // falls through to a symbol-only index.
+        const indexModel = vscode.workspace
+            .getConfiguration('vectra')
+            .get<string>('indexModel', '')
+            .trim();
+        const args = ['index', '.', '--quiet'];
+        if (indexModel.length > 0) {
+            args.push('--model', indexModel);
+        }
         return new Promise<void>((resolve) => {
-            this.output.appendLine(`> ${binary} index . --quiet`);
+            this.output.appendLine(`> ${binary} ${args.join(' ')}`);
             let proc: cp.ChildProcess;
             try {
-                proc = cp.spawn(binary, ['index', '.', '--quiet'], {
+                proc = cp.spawn(binary, args, {
                     cwd: this.cwd,
                     env: process.env,
                 });

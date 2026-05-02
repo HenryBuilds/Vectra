@@ -84,15 +84,38 @@ function migrateHistory(raw: unknown): ChatMessage[] {
 interface EmptyStateProps {
     onAction(commandId: string): void;
     indexExists: boolean;
+    indexModel: string;
+    reranker: string;
 }
 
-function EmptyState({ onAction, indexExists }: EmptyStateProps) {
+function EmptyState({ onAction, indexExists, indexModel, reranker }: EmptyStateProps) {
     return (
         <div className="empty-state">
             <div className="empty-title">Ask Vectra anything about this codebase</div>
             Each turn runs hybrid retrieval (BM25 + embeddings) over the local index, then
             hands the top chunks to <code>claude -p</code>. Switch the model and thinking
             budget at the top of the panel.
+            <div className="empty-config">
+                <div className="empty-config-row">
+                    <span className="empty-config-label">embedder</span>
+                    <span className="empty-config-value">
+                        {indexModel || 'symbol-only (no embeddings)'}
+                    </span>
+                </div>
+                <div className="empty-config-row">
+                    <span className="empty-config-label">reranker</span>
+                    <span className="empty-config-value">{reranker || 'off'}</span>
+                </div>
+                <div className="empty-config-actions">
+                    <button
+                        type="button"
+                        className="action-link"
+                        onClick={() => onAction('vectra.reindexWithModel')}
+                    >
+                        Change model & re-index…
+                    </button>
+                </div>
+            </div>
             {!indexExists && (
                 <div className="actions">
                     <button
@@ -133,6 +156,8 @@ export function App() {
     // "Index this workspace" CTA before the host has a chance to
     // tell us the index is already there.
     const [indexExists, setIndexExists] = React.useState<boolean>(true);
+    const [indexModel, setIndexModel] = React.useState<string>('');
+    const [reranker, setReranker] = React.useState<string>('');
 
     const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -325,6 +350,8 @@ export function App() {
                     // Future: prefill model/effort from config the
                     // first time, never override the user's pick.
                     setIndexExists(m.indexExists);
+                    setIndexModel(m.indexModel ?? '');
+                    setReranker(m.reranker ?? '');
                     break;
                 case 'sessionLoaded':
                     // Host pushed a session into us — either the
@@ -428,7 +455,12 @@ export function App() {
             />
             <main className="messages">
                 {history.length === 0 ? (
-                    <EmptyState onAction={handleAction} indexExists={indexExists} />
+                    <EmptyState
+                        onAction={handleAction}
+                        indexExists={indexExists}
+                        indexModel={indexModel}
+                        reranker={reranker}
+                    />
                 ) : (
                     history.map((msg) => (
                         <Message

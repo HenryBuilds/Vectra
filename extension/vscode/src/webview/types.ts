@@ -278,6 +278,11 @@ export interface ConfigInbound {
     // already present, which removes a recurring confusion source
     // ("vectra is asking me to index again even though I did").
     indexExists: boolean;
+    // Active retrieval-side model settings — surfaced in the empty
+    // state so the user can see which embedder will run on the
+    // next index / ask without leaving the chat.
+    indexModel?: string;
+    reranker?: string;
 }
 
 export interface NewChatInbound {
