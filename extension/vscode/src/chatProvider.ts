@@ -39,6 +39,9 @@ interface SendMessage {
     model?: string;
     effort?: string;
     topK?: number;
+    // Per-message override; when undefined / empty, fall back to the
+    // vectra.permissionMode workspace setting.
+    permissionMode?: string;
 }
 
 interface CancelMessage {
@@ -390,11 +393,16 @@ export class VectraChatPanel {
         if (m.effort && m.effort.length > 0) {
             args.push('--effort', m.effort);
         }
-        // Forward the permission mode from the workspace setting. The
-        // chat panel reads it once per send rather than caching at
-        // construction time so a mode flip in Settings takes effect
-        // on the very next message without reloading the webview.
-        const permissionMode = cfg.get<string>('permissionMode', '').trim();
+        // Forward the permission mode. Precedence: per-message
+        // toolbar pick (m.permissionMode) wins; otherwise the
+        // vectra.permissionMode workspace setting; otherwise leave
+        // it off and let the CLI's own default (acceptEdits) apply.
+        // The chat panel reads the setting on every send so a flip
+        // in Settings takes effect on the next message without a
+        // reload, even when the toolbar is on "mode: settings".
+        const permissionMode =
+            (m.permissionMode && m.permissionMode.trim()) ||
+            cfg.get<string>('permissionMode', '').trim();
         if (permissionMode) {
             args.push('--permission-mode', permissionMode);
         }

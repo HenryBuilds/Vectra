@@ -5,8 +5,10 @@ import * as React from 'react';
 interface ToolbarProps {
     model: string;
     effort: string;
+    permissionMode: string;
     onModelChange(model: string): void;
     onEffortChange(effort: string): void;
+    onPermissionModeChange(mode: string): void;
 }
 
 const MODEL_OPTIONS = [
@@ -23,7 +25,25 @@ const EFFORT_OPTIONS = [
     { value: 'high', label: 'high' },
 ];
 
-export function Toolbar({ model, effort, onModelChange, onEffortChange }: ToolbarProps) {
+// Mirrors the Claude Code mode picker. Empty value means "fall back
+// to the vectra.permissionMode workspace setting"; the rest map 1:1
+// to the values claude -p accepts.
+const PERMISSION_MODE_OPTIONS = [
+    { value: '', label: 'mode: settings' },
+    { value: 'default', label: 'ask before edits' },
+    { value: 'acceptEdits', label: 'auto-edit' },
+    { value: 'plan', label: 'plan only' },
+    { value: 'bypassPermissions', label: 'bypass permissions' },
+];
+
+export function Toolbar({
+    model,
+    effort,
+    permissionMode,
+    onModelChange,
+    onEffortChange,
+    onPermissionModeChange,
+}: ToolbarProps) {
     return (
         <header className="toolbar">
             <select
@@ -43,6 +63,17 @@ export function Toolbar({ model, effort, onModelChange, onEffortChange }: Toolba
                 title="Thinking budget passed as --effort"
             >
                 {EFFORT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                        {o.label}
+                    </option>
+                ))}
+            </select>
+            <select
+                value={permissionMode}
+                onChange={(e) => onPermissionModeChange(e.target.value)}
+                title="Permission mode passed as --permission-mode (mirrors Claude Code's mode picker)"
+            >
+                {PERMISSION_MODE_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
                         {o.label}
                     </option>

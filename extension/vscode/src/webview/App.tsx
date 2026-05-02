@@ -115,6 +115,9 @@ export function App() {
     );
     const [model, setModel] = React.useState<string>(persisted?.model ?? '');
     const [effort, setEffort] = React.useState<string>(persisted?.effort ?? '');
+    const [permissionMode, setPermissionMode] = React.useState<string>(
+        persisted?.permissionMode ?? '',
+    );
     const [activeId, setActiveId] = React.useState<string | null>(null);
     // Persisted on the host side via the `config` event from
     // chatProvider.ts. Default true to avoid flashing the
@@ -127,8 +130,8 @@ export function App() {
     // Persist relevant slices of state whenever they change. Cheap;
     // setState is just a write to webview-internal storage.
     React.useEffect(() => {
-        host.setState({ history, model, effort });
-    }, [history, model, effort]);
+        host.setState({ history, model, effort, permissionMode });
+    }, [history, model, effort, permissionMode]);
 
     // Scroll to bottom on every message update.
     React.useEffect(() => {
@@ -358,6 +361,7 @@ export function App() {
             text,
             model: model || undefined,
             effort: effort || undefined,
+            permissionMode: permissionMode || undefined,
         });
     };
 
@@ -381,8 +385,10 @@ export function App() {
             <Toolbar
                 model={model}
                 effort={effort}
+                permissionMode={permissionMode}
                 onModelChange={setModel}
                 onEffortChange={setEffort}
+                onPermissionModeChange={setPermissionMode}
             />
             <main className="messages">
                 {history.length === 0 ? (

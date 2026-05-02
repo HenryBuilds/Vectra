@@ -101,6 +101,10 @@ export interface SendOutbound {
     model?: string;
     effort?: string;
     topK?: number;
+    // Empty / undefined means "fall back to the vectra.permissionMode
+    // workspace setting"; a non-empty value overrides the setting for
+    // this single send only.
+    permissionMode?: string;
 }
 
 export interface CancelOutbound {
@@ -300,4 +304,5 @@ export interface PersistedState {
     history: ChatMessage[];
     model: string;
     effort: string;
+    permissionMode: string;
 }
