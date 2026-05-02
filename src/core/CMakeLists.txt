@@ -40,6 +40,10 @@ target_link_libraries(vectra_core
         vectra::grammar::java
         vectra::grammar::ruby
         vectra::grammar::csharp
+        vectra::grammar::bash
+        vectra::grammar::kotlin
+        vectra::grammar::php
+        vectra::grammar::markdown
         # Third-party libraries.
         BLAKE3::blake3
         tomlplusplus::tomlplusplus

@@ -21,10 +21,10 @@ TEST_CASE("registry loads languages.toml without throwing", "[language]") {
     REQUIRE_NOTHROW(load_repo_registry());
 }
 
-TEST_CASE("registry exposes all eleven built-in languages", "[language]") {
+TEST_CASE("registry exposes all fifteen built-in languages", "[language]") {
     const auto registry = load_repo_registry();
 
-    REQUIRE(registry.all().size() == 11);
+    REQUIRE(registry.all().size() == 15);
 
     for (const auto* name : {"c",
                              "cpp",
@@ -36,7 +36,11 @@ TEST_CASE("registry exposes all eleven built-in languages", "[language]") {
                              "go",
                              "java",
                              "ruby",
-                             "csharp"}) {
+                             "csharp",
+                             "bash",
+                             "kotlin",
+                             "php",
+                             "markdown"}) {
         const auto* lang = registry.by_name(name);
         REQUIRE(lang != nullptr);
         REQUIRE(lang->ts_language != nullptr);
@@ -51,6 +55,14 @@ TEST_CASE("by_extension resolves the newly added languages", "[language]") {
     REQUIRE(registry.by_extension("rb")->name == "ruby");
     REQUIRE(registry.by_extension("rake")->name == "ruby");
     REQUIRE(registry.by_extension("cs")->name == "csharp");
+    REQUIRE(registry.by_extension("sh")->name == "bash");
+    REQUIRE(registry.by_extension("bash")->name == "bash");
+    REQUIRE(registry.by_extension("kt")->name == "kotlin");
+    REQUIRE(registry.by_extension("kts")->name == "kotlin");
+    REQUIRE(registry.by_extension("php")->name == "php");
+    REQUIRE(registry.by_extension("phtml")->name == "php");
+    REQUIRE(registry.by_extension("md")->name == "markdown");
+    REQUIRE(registry.by_extension("markdown")->name == "markdown");
 }
 
 TEST_CASE("by_extension resolves by file extension, case-insensitively", "[language]") {

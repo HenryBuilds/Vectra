@@ -129,3 +129,47 @@ symbol      = "tree_sitter_c_sharp"
 chunks      = "queries/csharp/chunks.scm"
 symbols     = "queries/csharp/symbols.scm"
 imports     = "queries/csharp/imports.scm"
+
+[[language]]
+name        = "bash"
+extensions  = ["sh", "bash", "zsh", "ksh"]
+grammar_dir = "third_party/grammars/tree-sitter-bash"
+symbol      = "tree_sitter_bash"
+chunks      = "queries/bash/chunks.scm"
+symbols     = "queries/bash/symbols.scm"
+imports     = "queries/bash/imports.scm"
+
+[[language]]
+name        = "kotlin"
+extensions  = ["kt", "kts"]
+grammar_dir = "third_party/grammars/tree-sitter-kotlin"
+symbol      = "tree_sitter_kotlin"
+chunks      = "queries/kotlin/chunks.scm"
+symbols     = "queries/kotlin/symbols.scm"
+imports     = "queries/kotlin/imports.scm"
+
+# tree-sitter-php ships two grammar variants (mixed PHP+HTML in `php/`,
+# pure PHP in `php_only/`). We point at `php/` because real-world .php
+# files often interleave HTML.
+[[language]]
+name        = "php"
+extensions  = ["php", "phtml", "php3", "php4", "php5", "php7", "phps"]
+grammar_dir = "third_party/grammars/tree-sitter-php/php"
+symbol      = "tree_sitter_php"
+chunks      = "queries/php/chunks.scm"
+symbols     = "queries/php/symbols.scm"
+imports     = "queries/php/imports.scm"
+
+# tree-sitter-markdown ships a block grammar and a paired inline
+# grammar in subdirs. We register only the block grammar — chunking
+# and outline extraction work on block structure, and the inline
+# grammar would add a second parser per file with no payoff for
+# retrieval.
+[[language]]
+name        = "markdown"
+extensions  = ["md", "markdown", "mdown", "mkd"]
+grammar_dir = "third_party/grammars/tree-sitter-markdown/tree-sitter-markdown"
+symbol      = "tree_sitter_markdown"
+chunks      = "queries/markdown/chunks.scm"
+symbols     = "queries/markdown/symbols.scm"
+imports     = "queries/markdown/imports.scm"

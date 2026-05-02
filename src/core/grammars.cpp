@@ -14,6 +14,10 @@ const TSLanguage* tree_sitter_go();
 const TSLanguage* tree_sitter_java();
 const TSLanguage* tree_sitter_ruby();
 const TSLanguage* tree_sitter_c_sharp();
+const TSLanguage* tree_sitter_bash();
+const TSLanguage* tree_sitter_kotlin();
+const TSLanguage* tree_sitter_php();
+const TSLanguage* tree_sitter_markdown();
 }  // extern "C"
 
 namespace vectra::core::detail {
@@ -45,6 +49,14 @@ const TSLanguage* grammar_by_symbol(std::string_view symbol) noexcept {
         return tree_sitter_ruby();
     if (symbol == "tree_sitter_c_sharp")
         return tree_sitter_c_sharp();
+    if (symbol == "tree_sitter_bash")
+        return tree_sitter_bash();
+    if (symbol == "tree_sitter_kotlin")
+        return tree_sitter_kotlin();
+    if (symbol == "tree_sitter_php")
+        return tree_sitter_php();
+    if (symbol == "tree_sitter_markdown")
+        return tree_sitter_markdown();
     return nullptr;
 }
 

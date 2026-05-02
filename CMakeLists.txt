@@ -173,6 +173,8 @@ set(VECTRA_GRAMMARS
     "java"
     "ruby"
     "csharp"
+    "bash"
+    "kotlin"
 )
 foreach(_lang IN LISTS VECTRA_GRAMMARS)
     add_tree_sitter_grammar(
@@ -187,6 +189,21 @@ add_tree_sitter_grammar(
 add_tree_sitter_grammar(
     NAME tsx
     PATH ${CMAKE_SOURCE_DIR}/third_party/grammars/tree-sitter-typescript/tsx)
+
+# tree-sitter-php ships two grammar variants (mixed PHP+HTML and pure
+# PHP) in one repo. We register the mixed-mode `php` variant because
+# real-world `.php` files often interleave HTML.
+add_tree_sitter_grammar(
+    NAME php
+    PATH ${CMAKE_SOURCE_DIR}/third_party/grammars/tree-sitter-php/php)
+
+# tree-sitter-markdown ships a block grammar and a paired inline
+# grammar. We only register the block one — chunking and outline
+# extraction work on block structure, and the inline grammar adds a
+# second parser per file with no payoff for retrieval.
+add_tree_sitter_grammar(
+    NAME markdown
+    PATH ${CMAKE_SOURCE_DIR}/third_party/grammars/tree-sitter-markdown/tree-sitter-markdown)
 
 # usearch is header-only. Expose its include directory as an INTERFACE
 # library so any consumer can link vectra::usearch and pick up the
