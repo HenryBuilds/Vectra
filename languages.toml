@@ -98,3 +98,34 @@ symbol      = "tree_sitter_go"
 chunks      = "queries/go/chunks.scm"
 symbols     = "queries/go/symbols.scm"
 imports     = "queries/go/imports.scm"
+
+[[language]]
+name        = "java"
+extensions  = ["java"]
+grammar_dir = "third_party/grammars/tree-sitter-java"
+symbol      = "tree_sitter_java"
+chunks      = "queries/java/chunks.scm"
+symbols     = "queries/java/symbols.scm"
+imports     = "queries/java/imports.scm"
+
+[[language]]
+name        = "ruby"
+extensions  = ["rb", "rake", "gemspec"]
+grammar_dir = "third_party/grammars/tree-sitter-ruby"
+symbol      = "tree_sitter_ruby"
+chunks      = "queries/ruby/chunks.scm"
+symbols     = "queries/ruby/symbols.scm"
+imports     = "queries/ruby/imports.scm"
+
+# tree-sitter-c-sharp is registered as `csharp` here (no hyphen) so it
+# fits the same `tree-sitter-${name}` directory convention as the other
+# grammars in the build loop. The submodule is checked out at
+# third_party/grammars/tree-sitter-csharp.
+[[language]]
+name        = "csharp"
+extensions  = ["cs", "csx"]
+grammar_dir = "third_party/grammars/tree-sitter-csharp"
+symbol      = "tree_sitter_c_sharp"
+chunks      = "queries/csharp/chunks.scm"
+symbols     = "queries/csharp/symbols.scm"
+imports     = "queries/csharp/imports.scm"

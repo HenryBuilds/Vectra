@@ -170,6 +170,9 @@ set(VECTRA_GRAMMARS
     "javascript"
     "rust"
     "go"
+    "java"
+    "ruby"
+    "csharp"
 )
 foreach(_lang IN LISTS VECTRA_GRAMMARS)
     add_tree_sitter_grammar(

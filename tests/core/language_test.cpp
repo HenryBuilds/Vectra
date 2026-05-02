@@ -21,18 +21,36 @@ TEST_CASE("registry loads languages.toml without throwing", "[language]") {
     REQUIRE_NOTHROW(load_repo_registry());
 }
 
-TEST_CASE("registry exposes all eight built-in languages", "[language]") {
+TEST_CASE("registry exposes all eleven built-in languages", "[language]") {
     const auto registry = load_repo_registry();
 
-    REQUIRE(registry.all().size() == 8);
+    REQUIRE(registry.all().size() == 11);
 
-    for (const auto* name :
-         {"c", "cpp", "python", "javascript", "typescript", "tsx", "rust", "go"}) {
+    for (const auto* name : {"c",
+                             "cpp",
+                             "python",
+                             "javascript",
+                             "typescript",
+                             "tsx",
+                             "rust",
+                             "go",
+                             "java",
+                             "ruby",
+                             "csharp"}) {
         const auto* lang = registry.by_name(name);
         REQUIRE(lang != nullptr);
         REQUIRE(lang->ts_language != nullptr);
         REQUIRE_FALSE(lang->chunks_query_source.empty());
     }
+}
+
+TEST_CASE("by_extension resolves the newly added languages", "[language]") {
+    const auto registry = load_repo_registry();
+
+    REQUIRE(registry.by_extension("java")->name == "java");
+    REQUIRE(registry.by_extension("rb")->name == "ruby");
+    REQUIRE(registry.by_extension("rake")->name == "ruby");
+    REQUIRE(registry.by_extension("cs")->name == "csharp");
 }
 
 TEST_CASE("by_extension resolves by file extension, case-insensitively", "[language]") {

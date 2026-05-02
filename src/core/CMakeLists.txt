@@ -37,6 +37,9 @@ target_link_libraries(vectra_core
         vectra::grammar::tsx
         vectra::grammar::rust
         vectra::grammar::go
+        vectra::grammar::java
+        vectra::grammar::ruby
+        vectra::grammar::csharp
         # Third-party libraries.
         BLAKE3::blake3
         tomlplusplus::tomlplusplus
