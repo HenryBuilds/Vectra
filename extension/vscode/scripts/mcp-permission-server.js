@@ -125,12 +125,24 @@ function postToBridge(bridgeUrl, token, body) {
     });
 }
 
+// Translate our internal {decision, reason} shape into the wire
+// format claude actually expects: {behavior: "allow"|"deny", message?,
+// updatedInput?}. Keeping the translation in one place means the
+// chatProvider / bridge never has to know about claude's specific
+// field names — they speak `decision` end-to-end internally.
+function asClaudeVerdict(decision, reason) {
+    if (decision === 'allow') {
+        return { behavior: 'allow' };
+    }
+    return { behavior: 'deny', message: reason || 'denied' };
+}
+
 async function decide(toolName, toolInput, toolUseId) {
     if (process.env.VECTRA_MCP_AUTO_APPROVE === '1') {
-        return {
-            decision: 'allow',
-            reason: 'vectra auto-approve (VECTRA_MCP_AUTO_APPROVE=1)',
-        };
+        return asClaudeVerdict(
+            'allow',
+            'vectra auto-approve (VECTRA_MCP_AUTO_APPROVE=1)',
+        );
     }
 
     const bridgeUrl = process.env.VECTRA_BRIDGE_URL;
@@ -138,13 +150,12 @@ async function decide(toolName, toolInput, toolUseId) {
     if (!bridgeUrl || !bridgeToken) {
         // Fail closed: deny when no transport is wired up so a user
         // never silently approves edits because the env propagation
-        // broke. The reason string lands in claude's tool result.
-        return {
-            decision: 'deny',
-            reason:
-                'vectra: VECTRA_BRIDGE_URL / VECTRA_BRIDGE_TOKEN not set; ' +
+        // broke. The message string lands in claude's tool result.
+        return asClaudeVerdict(
+            'deny',
+            'vectra: VECTRA_BRIDGE_URL / VECTRA_BRIDGE_TOKEN not set; ' +
                 'the chat panel is the only thing that can approve edits.',
-        };
+        );
     }
 
     try {
@@ -153,22 +164,22 @@ async function decide(toolName, toolInput, toolUseId) {
             tool_input: toolInput,
             tool_use_id: toolUseId,
         });
-        // The bridge already returns {decision, reason} so this is a
-        // pass-through; we still validate the shape so a malformed
-        // response from a future bridge revision becomes a deny
-        // rather than an undefined that claude misreads.
+        // The bridge speaks {decision, reason}; translate to claude's
+        // {behavior, message?} on the way out. Anything malformed
+        // becomes a deny so a future bridge revision can't silently
+        // green-light edits.
         if (response && (response.decision === 'allow' || response.decision === 'deny')) {
-            return response;
+            return asClaudeVerdict(response.decision, response.reason);
         }
-        return {
-            decision: 'deny',
-            reason: `vectra: bridge returned an unrecognised body (${JSON.stringify(response).slice(0, 200)})`,
-        };
+        return asClaudeVerdict(
+            'deny',
+            `vectra: bridge returned an unrecognised body (${JSON.stringify(response).slice(0, 200)})`,
+        );
     } catch (err) {
-        return {
-            decision: 'deny',
-            reason: `vectra bridge error: ${err.message ?? String(err)}`,
-        };
+        return asClaudeVerdict(
+            'deny',
+            `vectra bridge error: ${err.message ?? String(err)}`,
+        );
     }
 }
 
