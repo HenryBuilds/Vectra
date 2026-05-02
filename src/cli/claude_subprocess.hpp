@@ -94,15 +94,18 @@ struct ClaudeInvocation {
 // area is too small to justify a dependency. Pure function — no
 // IO, deterministic, easily tested.
 //
-// Escapes:
-//   "  -> \"
-//   \  -> \\
-//   \n -> \n   (literal two-char sequence)
-//   \r -> \r
-//   \t -> \t
-//   any byte < 0x20 -> \u00XX
+// Escapes (input -> output):
+//   double-quote     -> backslash-quote
+//   backslash        -> backslash-backslash
+//   newline          -> backslash-n
+//   carriage return  -> backslash-r
+//   tab              -> backslash-t
+//   any byte < 0x20  -> backslash-u-00XX
 // Other bytes (including UTF-8 continuation bytes >= 0x80) pass
-// through unchanged.
+// through unchanged. The escape table is described in prose
+// rather than literal characters so the // comment does not end
+// in a backslash, which under C2x line-continuation rules merges
+// it with the next line and triggers -Wcomment on GCC.
 [[nodiscard]] std::string json_escape(std::string_view s);
 
 // Render a stream-json `vectra_event` carrying the chunks claude
