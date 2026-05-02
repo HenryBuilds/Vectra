@@ -125,9 +125,12 @@ std::string compose_prompt(const PromptComposition& comp) {
     if (!comp.context.empty()) {
         out += '\n';
         out +=
-            "Below are excerpts the local index surfaced as relevant. They are\n"
-            "read-only context — they may be stale, so verify with the actual\n"
-            "files before editing.\n\n";
+            "Below are excerpts the local index surfaced as relevant. Treat\n"
+            "them as reference snippets only — they may be stale, and Claude\n"
+            "Code's Edit / Write tools require a fresh Read tool call on the\n"
+            "same file within this session before they accept a modification.\n"
+            "Always call Read on a file before editing it, even if the snippet\n"
+            "below already shows the lines you intend to change.\n\n";
 
         for (const auto& c : comp.context) {
             out += fmt::format(
