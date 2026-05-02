@@ -125,12 +125,21 @@ std::string compose_prompt(const PromptComposition& comp) {
     if (!comp.context.empty()) {
         out += '\n';
         out +=
-            "Below are excerpts the local index surfaced as relevant. Treat\n"
-            "them as reference snippets only — they may be stale, and Claude\n"
-            "Code's Edit / Write tools require a fresh Read tool call on the\n"
-            "same file within this session before they accept a modification.\n"
-            "Always call Read on a file before editing it, even if the snippet\n"
-            "below already shows the lines you intend to change.\n\n";
+            "VECTRA INVARIANTS — read before acting:\n"
+            "1. TOOL ORDER. When you intend to modify a file whose contents\n"
+            "   appear in the <context> blocks below, you MUST call the Read\n"
+            "   tool on that file before calling Edit or Write. The chunks\n"
+            "   are pre-fetched references — Claude Code's Edit / Write tools\n"
+            "   require a session-local Read call to verify the file is\n"
+            "   current. Always call Read first, even if the snippet below\n"
+            "   already shows the lines you intend to change.\n"
+            "2. SCOPE. Only modify files the user's task explicitly mentions.\n"
+            "   Do NOT propagate the same change to other files where the\n"
+            "   same string or pattern happens to appear in the <context>\n"
+            "   blocks, unless the user asked for that explicitly. When the\n"
+            "   user names one file (e.g. \"update the impressum\") and the\n"
+            "   chunks reveal the same value in other files, list the other\n"
+            "   matches as a follow-up question rather than editing them.\n\n";
 
         for (const auto& c : comp.context) {
             out += fmt::format(

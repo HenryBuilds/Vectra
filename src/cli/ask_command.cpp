@@ -345,35 +345,6 @@ int run_ask(const AskOptions& opts) {
         inv.extra_args.push_back(mode);
     }
 
-    // Inject the Vectra-specific invariants as a SYSTEM-prompt
-    // append. Two rules go in:
-    //   1. Tool order — chunks in the user message do not satisfy
-    //      Claude Code's Edit/Write read-before-write check.
-    //   2. Scope — do not propagate the same change across other
-    //      files where the pattern happens to appear.
-    // System-level instructions have meaningfully higher compliance
-    // than user-prompt instructions, especially the second one
-    // (claude tends to be "helpful" and over-edit when chunks make
-    // the appearance broader than the user's actual ask). We only
-    // add the append when there is context to constrain — without
-    // chunks the rules are vacuous and would waste tokens.
-    if (!comp.context.empty()) {
-        inv.extra_args.push_back("--append-system-prompt");
-        inv.extra_args.push_back(
-            "VECTRA INVARIANTS:\n"
-            "1. TOOL ORDER. When you intend to modify a file whose contents appear in the "
-            "user message's <context> blocks, you MUST call the Read tool on that file "
-            "before calling Edit or Write. The <context> blocks are pre-fetched references "
-            "— Claude Code's Edit/Write tools require a session-local Read call to verify "
-            "the file is current.\n"
-            "2. SCOPE. Only modify files the user's task explicitly mentions. Do not "
-            "propagate the same change to other files where the same string or pattern "
-            "happens to appear in the <context> blocks, unless the user asked for that "
-            "explicitly. When the user names one file (\"update the impressum\") and the "
-            "chunks reveal the same value in other files, list the other matches as a "
-            "follow-up question rather than editing them.");
-    }
-
     for (const auto& a : resolved.claude_extra_args) {
         inv.extra_args.push_back(a);
     }
