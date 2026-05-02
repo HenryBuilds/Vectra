@@ -4,9 +4,10 @@ import * as React from 'react';
 
 import { Composer } from './Composer';
 import { Message } from './Message';
+import { PermissionModal } from './PermissionModal';
 import { Toolbar } from './Toolbar';
 import * as host from './vscode';
-import type { ChatMessage, Inbound, MessageBlock } from './types';
+import type { ChatMessage, Inbound, MessageBlock, PermissionRequest } from './types';
 
 function newId(): string {
     return `t${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -119,6 +120,14 @@ export function App() {
         persisted?.permissionMode ?? '',
     );
     const [activeId, setActiveId] = React.useState<string | null>(null);
+    // Pending permission requests — FIFO queue. The head is rendered
+    // as the active modal; once the user decides we shift it off and
+    // the next one becomes visible. Not persisted: in-flight
+    // approvals do not survive a webview reload, the bridge denies
+    // them on the host side.
+    const [pendingPermissions, setPendingPermissions] = React.useState<PermissionRequest[]>(
+        [],
+    );
     // Persisted on the host side via the `config` event from
     // chatProvider.ts. Default true to avoid flashing the
     // "Index this workspace" CTA before the host has a chance to
@@ -330,6 +339,17 @@ export function App() {
                     }
                     setActiveId(null);
                     break;
+                case 'permissionRequest':
+                    setPendingPermissions((q) => [
+                        ...q,
+                        {
+                            requestId: m.requestId,
+                            toolName: m.toolName,
+                            toolInput: m.toolInput,
+                            toolUseId: m.toolUseId,
+                        },
+                    ]);
+                    break;
             }
         };
         window.addEventListener('message', handler);
@@ -380,6 +400,22 @@ export function App() {
         host.postMessage({ type: 'openFile', path, line });
     };
 
+    // Settle the head of the permission queue. Posts the user's
+    // decision to the host (which lets the bridge HTTP response
+    // through) and shifts the head off so the next modal — if any
+    // — slides in.
+    const handlePermissionDecision = (
+        request: PermissionRequest,
+        decision: 'allow' | 'deny',
+    ) => {
+        host.postMessage({
+            type: 'permissionResponse',
+            requestId: request.requestId,
+            decision,
+        });
+        setPendingPermissions((q) => q.filter((r) => r.requestId !== request.requestId));
+    };
+
     return (
         <div className="root">
             <Toolbar
@@ -406,6 +442,13 @@ export function App() {
                 )}
                 <div ref={messagesEndRef} />
             </main>
+            {pendingPermissions.length > 0 && (
+                <PermissionModal
+                    request={pendingPermissions[0]}
+                    onApprove={() => handlePermissionDecision(pendingPermissions[0], 'allow')}
+                    onDeny={() => handlePermissionDecision(pendingPermissions[0], 'deny')}
+                />
+            )}
             <Composer busy={activeId !== null} onSend={handleSend} onCancel={handleCancel} />
         </div>
     );

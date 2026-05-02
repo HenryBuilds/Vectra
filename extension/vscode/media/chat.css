@@ -616,3 +616,136 @@ button.source-item:focus {
     text-align: right;
     user-select: text;
 }
+
+/* ------------------------------------------------------------------ */
+/* Permission approval modal (rendered between messages and composer) */
+/* ------------------------------------------------------------------ */
+
+.permission-modal {
+    margin: 8px 12px 0 12px;
+    border: 1px solid var(--vscode-focusBorder, var(--vscode-panel-border));
+    border-radius: 6px;
+    background: var(--vscode-editor-background);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+}
+
+.permission-header {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 10px 12px 6px 12px;
+    font-size: 12px;
+}
+
+.permission-tool {
+    font-weight: 600;
+    font-family: var(--vscode-editor-font-family, monospace);
+    color: var(--vscode-charts-blue, var(--vscode-textLink-foreground));
+}
+
+.permission-prompt {
+    color: var(--vscode-descriptionForeground);
+}
+
+.permission-body {
+    padding: 4px 12px 8px 12px;
+    font-size: 12px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.permission-file {
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 6px;
+    word-break: break-all;
+}
+
+.permission-desc {
+    color: var(--vscode-foreground);
+    margin-bottom: 4px;
+}
+
+.permission-diff {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    gap: 4px;
+    margin: 2px 0;
+}
+
+.permission-diff-label {
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-weight: 700;
+    text-align: center;
+    user-select: none;
+}
+
+.permission-diff-old,
+.permission-diff-new {
+    margin: 0;
+    padding: 4px 6px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-radius: 3px;
+}
+
+.permission-diff-old {
+    background: var(--vscode-diffEditor-removedTextBackground, rgba(255, 0, 0, 0.12));
+    color: var(--vscode-foreground);
+}
+
+.permission-diff-new {
+    background: var(--vscode-diffEditor-insertedTextBackground, rgba(0, 200, 0, 0.14));
+    color: var(--vscode-foreground);
+}
+
+.permission-input {
+    margin: 0;
+    padding: 6px 8px;
+    background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-radius: 3px;
+}
+
+.permission-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 12px 10px 12px;
+    border-top: 1px solid var(--vscode-panel-border);
+}
+
+.permission-btn {
+    padding: 4px 14px;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.permission-btn.deny {
+    background: transparent;
+    color: var(--vscode-foreground);
+    border-color: var(--vscode-panel-border);
+}
+
+.permission-btn.deny:hover {
+    background: var(--vscode-toolbar-hoverBackground);
+}
+
+.permission-btn.approve {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.permission-btn.approve:hover {
+    background: var(--vscode-button-hoverBackground);
+}

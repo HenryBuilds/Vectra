@@ -28,9 +28,13 @@
 
 import * as cp from 'child_process';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { ChatStorage, relativeTime } from './chatStorage';
+import type { PermissionBridge, PermissionRequest } from './permissionBridge';
 
 interface SendMessage {
     type: 'send';
@@ -74,6 +78,13 @@ interface SaveSessionMessage {
     messages: unknown[];
 }
 
+interface PermissionResponseMessage {
+    type: 'permissionResponse';
+    requestId: string;
+    decision: 'allow' | 'deny';
+    reason?: string;
+}
+
 interface MessageAction {
     label: string;
     commandId: string;
@@ -86,7 +97,8 @@ type WebviewMessage =
     | ReadyMessage
     | ActionMessage
     | OpenFileMessage
-    | SaveSessionMessage;
+    | SaveSessionMessage
+    | PermissionResponseMessage;
 
 export class VectraChatPanel {
     // viewType doubles as the `activeWebviewPanelId` context key value
@@ -98,8 +110,12 @@ export class VectraChatPanel {
     private readonly panel: vscode.WebviewPanel;
     private readonly extensionUri: vscode.Uri;
     private readonly storage: ChatStorage;
+    private readonly bridge: PermissionBridge;
     private readonly disposables: vscode.Disposable[] = [];
     private readonly active = new Map<string, cp.ChildProcess>();
+    // Temp files (MCP config) we wrote for in-flight runs. Cleaned
+    // up when each child exits; force-removed on dispose.
+    private readonly tempFiles = new Set<string>();
 
     // Conversation continuity. One UUID per chat session; the same
     // UUID is forwarded to claude as --session-id (first turn) /
@@ -112,7 +128,11 @@ export class VectraChatPanel {
     private sessionTitle: string = '';
     private sessionCreatedAt: number = 0;
 
-    public static createOrShow(extensionUri: vscode.Uri, storage: ChatStorage): void {
+    public static createOrShow(
+        extensionUri: vscode.Uri,
+        storage: ChatStorage,
+        bridge: PermissionBridge,
+    ): void {
         const column = vscode.ViewColumn.Beside;
 
         if (VectraChatPanel.current) {
@@ -137,7 +157,7 @@ export class VectraChatPanel {
         const iconUri = vscode.Uri.joinPath(extensionUri, 'media', 'icon.svg');
         panel.iconPath = { light: iconUri, dark: iconUri };
 
-        VectraChatPanel.current = new VectraChatPanel(panel, extensionUri, storage);
+        VectraChatPanel.current = new VectraChatPanel(panel, extensionUri, storage, bridge);
     }
 
     public static newChat(): void {
@@ -152,10 +172,12 @@ export class VectraChatPanel {
         panel: vscode.WebviewPanel,
         extensionUri: vscode.Uri,
         storage: ChatStorage,
+        bridge: PermissionBridge,
     ) {
         this.panel = panel;
         this.extensionUri = extensionUri;
         this.storage = storage;
+        this.bridge = bridge;
 
         this.panel.webview.html = this.renderHtml(this.panel.webview);
 
@@ -164,6 +186,19 @@ export class VectraChatPanel {
             null,
             this.disposables,
         );
+
+        // Bridge → webview: forward each in-flight permission
+        // request to the chat panel as a permissionRequest message.
+        // The webview owns the modal queue; we just route.
+        this.bridge.setListener((req: PermissionRequest) => {
+            this.post({
+                type: 'permissionRequest',
+                requestId: req.requestId,
+                toolName: req.toolName,
+                toolInput: req.toolInput,
+                toolUseId: req.toolUseId,
+            });
+        });
 
         this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
 
@@ -178,6 +213,16 @@ export class VectraChatPanel {
     private dispose(): void {
         VectraChatPanel.current = undefined;
         this.killAll();
+        // Force-deny any in-flight approvals so the bridge does not
+        // hold their HTTP responses open after the panel is gone.
+        this.bridge.denyAll('vectra chat panel closed');
+        // Best-effort cleanup of any stale MCP config files we left
+        // lying around (proc 'close' handler already nukes the
+        // common path; this catches the cases where the child died
+        // between writeMcpConfig and spawn).
+        for (const p of [...this.tempFiles]) {
+            this.removeTempFile(p);
+        }
         while (this.disposables.length > 0) {
             this.disposables.pop()?.dispose();
         }
@@ -333,7 +378,55 @@ export class VectraChatPanel {
             case 'saveSession':
                 void this.handleSaveSession(m);
                 break;
+            case 'permissionResponse':
+                this.bridge.resolve(m.requestId, {
+                    decision: m.decision,
+                    reason:
+                        m.reason ??
+                        (m.decision === 'allow' ? 'user approved' : 'user denied'),
+                });
+                break;
         }
+    }
+
+    // Write a one-shot MCP config file pointing at the bundled
+    // mcp-permission-server.js, with the bridge URL + token wired in
+    // via env so the script can call back to us. Returns the temp
+    // path; the caller is responsible for cleaning it up after the
+    // child exits.
+    private writeMcpConfig(): string {
+        const scriptPath = path.join(
+            this.extensionUri.fsPath,
+            'scripts',
+            'mcp-permission-server.js',
+        );
+        const config = {
+            mcpServers: {
+                vectra: {
+                    command: 'node',
+                    args: [scriptPath],
+                    env: {
+                        VECTRA_BRIDGE_URL: this.bridge.url,
+                        VECTRA_BRIDGE_TOKEN: this.bridge.authToken,
+                    },
+                },
+            },
+        };
+        const tmp = path.join(
+            os.tmpdir(),
+            `vectra-mcp-${crypto.randomBytes(8).toString('hex')}.json`,
+        );
+        fs.writeFileSync(tmp, JSON.stringify(config), { encoding: 'utf8' });
+        this.tempFiles.add(tmp);
+        return tmp;
+    }
+
+    private removeTempFile(p: string): void {
+        if (!this.tempFiles.has(p)) return;
+        this.tempFiles.delete(p);
+        fs.rm(p, { force: true }, () => {
+            // Best-effort; ignore failures (e.g. file already gone).
+        });
     }
 
     private async postConfig(): Promise<void> {
@@ -420,6 +513,23 @@ export class VectraChatPanel {
         // binaries, error output before claude starts).
         args.push('--stream-json');
 
+        // Wire the permission bridge: tell claude to delegate every
+        // tool-use approval through our bundled MCP server. The
+        // server in turn calls back to the bridge HTTP endpoint
+        // running inside this VS Code process, which surfaces the
+        // request as a modal in the webview. acceptEdits / plan
+        // modes still skip our gate where applicable, so the
+        // toolbar pick stays in charge of the policy — the bridge
+        // just shows up when claude actually wants to ask.
+        const mcpConfigPath = this.writeMcpConfig();
+        args.push('--claude-arg', '--mcp-config', '--claude-arg', mcpConfigPath);
+        args.push(
+            '--claude-arg',
+            '--permission-prompt-tool',
+            '--claude-arg',
+            'mcp__vectra__request_permission',
+        );
+
         this.post({ type: 'started', id: m.id });
 
         let proc: cp.ChildProcess;
@@ -474,6 +584,12 @@ export class VectraChatPanel {
                 stdoutBuffer = '';
             }
             this.active.delete(m.id);
+            // claude is gone — drop the MCP config tempfile and
+            // force-deny any in-flight approval (so the modal in the
+            // webview, if still open, becomes a no-op rather than
+            // resolving a now-dead HTTP holder).
+            this.removeTempFile(mcpConfigPath);
+            this.bridge.denyAll('claude run ended before approval');
             const exit = code ?? 0;
 
             // Pattern-match common Vectra errors and surface a

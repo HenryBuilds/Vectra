@@ -19,6 +19,7 @@ import { AutoIndexer } from './autoIndexer';
 import { ChatStorage } from './chatStorage';
 import { VectraChatPanel } from './chatProvider';
 import { indexLock } from './indexLock';
+import { PermissionBridge } from './permissionBridge';
 
 const OUTPUT_CHANNEL_NAME = 'Vectra';
 
@@ -222,8 +223,22 @@ export function activate(context: vscode.ExtensionContext): void {
     // see each other's chat history.
     const storage = new ChatStorage(context.globalStorageUri);
 
+    // PermissionBridge: HTTP listener on a random localhost port,
+    // gated by a per-activation bearer token. The bundled MCP
+    // permission-server.js POSTs each tool-use approval here; the
+    // chat panel registers its listener once on first openChat. Bind
+    // synchronously so listen() finishes before any chat panel
+    // tries to writeMcpConfig() against bridge.url.
+    const bridge = new PermissionBridge();
+    void bridge.start().catch((err) => {
+        output.appendLine(
+            `[vectra: permission bridge failed to start: ${err instanceof Error ? err.message : String(err)}]`,
+        );
+    });
+
     context.subscriptions.push(
         output,
+        bridge,
         vscode.commands.registerCommand('vectra.ask', () => commandAsk(output)),
         vscode.commands.registerCommand('vectra.askAboutSelection', () =>
             commandAskAboutSelection(output),
@@ -234,7 +249,7 @@ export function activate(context: vscode.ExtensionContext): void {
             VectraChatPanel.showHistory(),
         ),
         vscode.commands.registerCommand('vectra.openChat', () => {
-            VectraChatPanel.createOrShow(context.extensionUri, storage);
+            VectraChatPanel.createOrShow(context.extensionUri, storage, bridge);
         }),
     );
 

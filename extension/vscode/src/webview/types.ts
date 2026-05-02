@@ -141,6 +141,17 @@ export interface SaveSessionOutbound {
     messages: ChatMessage[];
 }
 
+// Webview decision for a PermissionRequestInbound. Echoes the
+// requestId so the host can settle the HTTP response held open in
+// the permission bridge. `reason` is optional; when omitted the
+// host substitutes a generic "user approved / denied" string.
+export interface PermissionResponseOutbound {
+    type: 'permissionResponse';
+    requestId: string;
+    decision: 'allow' | 'deny';
+    reason?: string;
+}
+
 export type Outbound =
     | SendOutbound
     | CancelOutbound
@@ -148,7 +159,8 @@ export type Outbound =
     | ReadyOutbound
     | ActionOutbound
     | OpenFileOutbound
-    | SaveSessionOutbound;
+    | SaveSessionOutbound
+    | PermissionResponseOutbound;
 
 // ---- Incoming (host -> webview) ---------------------------------
 
@@ -284,6 +296,24 @@ export interface SessionLoadedInbound {
     session: { id: string; title: string; messages: ChatMessage[] } | null;
 }
 
+// In-flight approval shape. Same fields the host receives from the
+// HTTP bridge; the webview's modal renders directly off this struct.
+export interface PermissionRequest {
+    requestId: string;
+    toolName: string;
+    toolInput: unknown;
+    toolUseId: string;
+}
+
+// Forwarded from the permission-bridge HTTP server when claude wants
+// to invoke a tool that requires approval. The webview shows a modal
+// and replies with a PermissionResponseOutbound. requestId is opaque
+// — the host uses it to look up the awaiting HTTP response; the
+// webview just echoes it back.
+export interface PermissionRequestInbound extends PermissionRequest {
+    type: 'permissionRequest';
+}
+
 export type Inbound =
     | StartedInbound
     | MetaInbound
@@ -298,7 +328,8 @@ export type Inbound =
     | ErrorInbound
     | ConfigInbound
     | NewChatInbound
-    | SessionLoadedInbound;
+    | SessionLoadedInbound
+    | PermissionRequestInbound;
 
 export interface PersistedState {
     history: ChatMessage[];
