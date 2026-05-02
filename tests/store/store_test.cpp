@@ -217,6 +217,172 @@ TEST_CASE("Store: chunks_missing_embedding lists chunks without an embedding", "
     REQUIRE(missing[0] == b.content_hash.to_hex());
 }
 
+// ---------------------------------------------------------------------------
+// put_embeddings (bulk variant)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Store: put_embeddings on an empty span is a no-op", "[store][bulk]") {
+    auto path = tmp_db_path();
+    auto store = Store::open(path);
+    // Should silently return without creating the vector index, so
+    // search after this call also finds nothing.
+    store.put_embeddings("qwen3-0.6b", {});
+    REQUIRE(store.embedding_count() == 0);
+    REQUIRE(store.search_vectors(std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F}, 1).empty());
+}
+
+TEST_CASE("Store: put_embeddings persists a batch and lights up search", "[store][bulk]") {
+    auto path = tmp_db_path();
+    auto store = Store::open(path);
+
+    auto c1 = make_chunk("a", "def a(): pass");
+    auto c2 = make_chunk("b", "def b(): pass");
+    auto c3 = make_chunk("c", "def c(): pass");
+    store.put_chunk("f.py", c1);
+    store.put_chunk("f.py", c2);
+    store.put_chunk("f.py", c3);
+
+    const std::vector<float> v1 = {1.0F, 0.0F, 0.0F, 0.0F};
+    const std::vector<float> v2 = {0.0F, 1.0F, 0.0F, 0.0F};
+    const std::vector<float> v3 = {0.0F, 0.0F, 1.0F, 0.0F};
+    const std::vector<Store::EmbeddingPut> batch = {
+        {c1.content_hash.to_hex(), v1},
+        {c2.content_hash.to_hex(), v2},
+        {c3.content_hash.to_hex(), v3},
+    };
+    store.put_embeddings("qwen3-0.6b", batch);
+
+    REQUIRE(store.embedding_count() == 3);
+
+    // Each vector lives at its expected slot.
+    REQUIRE(store.get_embedding(c1.content_hash.to_hex()).value()[0] == 1.0F);
+    REQUIRE(store.get_embedding(c2.content_hash.to_hex()).value()[1] == 1.0F);
+    REQUIRE(store.get_embedding(c3.content_hash.to_hex()).value()[2] == 1.0F);
+
+    // ANN search picks up every batch member.
+    const auto hits = store.search_vectors(v2, 3);
+    REQUIRE(hits.size() == 3);
+    REQUIRE(hits[0].chunk_hash == c2.content_hash.to_hex());
+}
+
+TEST_CASE("Store: put_embeddings rejects an empty vector", "[store][bulk]") {
+    auto path = tmp_db_path();
+    auto store = Store::open(path);
+
+    auto c = make_chunk("a", "def a(): pass");
+    store.put_chunk("f.py", c);
+
+    const std::vector<Store::EmbeddingPut> batch = {
+        {c.content_hash.to_hex(), {}},
+    };
+    REQUIRE_THROWS_AS(store.put_embeddings("qwen3-0.6b", batch), std::runtime_error);
+    REQUIRE(store.embedding_count() == 0);
+}
+
+TEST_CASE("Store: put_embeddings rejects mixed dims inside a single batch", "[store][bulk]") {
+    auto path = tmp_db_path();
+    auto store = Store::open(path);
+
+    auto c1 = make_chunk("a", "def a(): pass");
+    auto c2 = make_chunk("b", "def b(): pass");
+    store.put_chunk("f.py", c1);
+    store.put_chunk("f.py", c2);
+
+    const std::vector<float> v_4d = {1.0F, 0.0F, 0.0F, 0.0F};
+    const std::vector<float> v_3d = {1.0F, 0.0F, 0.0F};
+    const std::vector<Store::EmbeddingPut> batch = {
+        {c1.content_hash.to_hex(), v_4d},
+        {c2.content_hash.to_hex(), v_3d},
+    };
+    REQUIRE_THROWS_AS(store.put_embeddings("qwen3-0.6b", batch), std::runtime_error);
+}
+
+TEST_CASE("Store: put_embeddings rejects a dim that mismatches the existing index",
+          "[store][bulk]") {
+    auto path = tmp_db_path();
+    auto store = Store::open(path);
+
+    auto c1 = make_chunk("a", "def a(): pass");
+    auto c2 = make_chunk("b", "def b(): pass");
+    store.put_chunk("f.py", c1);
+    store.put_chunk("f.py", c2);
+
+    // Seed with a 4-d vector via the single-row API.
+    store.put_embedding(
+        c1.content_hash.to_hex(), "qwen3-0.6b", std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F});
+
+    // Bulk-insert a mismatched 3-d vector — must reject.
+    const std::vector<Store::EmbeddingPut> batch = {
+        {c2.content_hash.to_hex(), std::vector<float>{1.0F, 0.0F, 0.0F}},
+    };
+    REQUIRE_THROWS_AS(store.put_embeddings("qwen3-0.6b", batch), std::runtime_error);
+}
+
+TEST_CASE("Store: put_embeddings flips chunks_missing_embedding to empty", "[store][bulk]") {
+    auto path = tmp_db_path();
+    auto store = Store::open(path);
+
+    auto a = make_chunk("a", "def a(): pass");
+    auto b = make_chunk("b", "def b(): pass");
+    store.put_chunk("f.py", a);
+    store.put_chunk("f.py", b);
+
+    REQUIRE(store.chunks_missing_embedding("qwen3-0.6b").size() == 2);
+
+    const std::vector<Store::EmbeddingPut> batch = {
+        {a.content_hash.to_hex(), std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F}},
+        {b.content_hash.to_hex(), std::vector<float>{0.0F, 1.0F, 0.0F, 0.0F}},
+    };
+    store.put_embeddings("qwen3-0.6b", batch);
+
+    REQUIRE(store.chunks_missing_embedding("qwen3-0.6b").empty());
+}
+
+TEST_CASE("Store: put_embeddings overwrites an existing vector", "[store][bulk]") {
+    auto path = tmp_db_path();
+    auto store = Store::open(path);
+
+    auto c = make_chunk("a", "def a(): pass");
+    store.put_chunk("f.py", c);
+
+    store.put_embedding(
+        c.content_hash.to_hex(), "qwen3-0.6b", std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F});
+    REQUIRE(store.embedding_count() == 1);
+
+    const std::vector<Store::EmbeddingPut> batch = {
+        {c.content_hash.to_hex(), std::vector<float>{0.0F, 0.0F, 0.0F, 1.0F}},
+    };
+    store.put_embeddings("qwen3-0.6b", batch);
+
+    REQUIRE(store.embedding_count() == 1);
+    REQUIRE(store.get_embedding(c.content_hash.to_hex()).value()[3] == 1.0F);
+    REQUIRE(store.get_embedding(c.content_hash.to_hex()).value()[0] == 0.0F);
+}
+
+TEST_CASE("Store: put_embeddings survives a reopen", "[store][bulk]") {
+    auto path = tmp_db_path();
+
+    auto c1 = make_chunk("a", "def a(): pass");
+    auto c2 = make_chunk("b", "def b(): pass");
+    {
+        auto store = Store::open(path);
+        store.put_chunk("f.py", c1);
+        store.put_chunk("f.py", c2);
+        const std::vector<Store::EmbeddingPut> batch = {
+            {c1.content_hash.to_hex(), std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F}},
+            {c2.content_hash.to_hex(), std::vector<float>{0.0F, 1.0F, 0.0F, 0.0F}},
+        };
+        store.put_embeddings("qwen3-0.6b", batch);
+    }
+
+    auto store = Store::open(path);
+    REQUIRE(store.embedding_count() == 2);
+    const std::vector<float> probe = {1.0F, 0.0F, 0.0F, 0.0F};
+    const auto hits = store.search_vectors(probe, 2);
+    REQUIRE(hits.size() == 2);
+    REQUIRE(hits[0].chunk_hash == c1.content_hash.to_hex());
+}
+
 TEST_CASE("Store: reopen sees prior chunks and rebuilds the vector index", "[store]") {
     auto path = tmp_db_path();
 

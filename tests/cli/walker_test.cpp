@@ -178,3 +178,146 @@ TEST_CASE("walker honours .gitignore inside a git repository", "[walker][git]") 
     REQUIRE_FALSE(contains(found, root / "gen" / "ignored.py"));
     REQUIRE_FALSE(contains(found, root / "private" / "secret.py"));
 }
+
+TEST_CASE("walker honours glob patterns in .gitignore", "[walker][git]") {
+    if (!git_available()) {
+        SUCCEED("git not on PATH; skipping glob test");
+        return;
+    }
+
+    const auto registry = load_repo_registry();
+    const auto root = make_tmp_root();
+
+    // Glob *.tmp.py in the entire tree should match files at any
+    // depth, not just at the repo root.
+    write_file(root / "src" / "kept.py", "def main(): pass\n");
+    write_file(root / "src" / "scratch.tmp.py", "pass\n");
+    write_file(root / "deep" / "nested" / "throwaway.tmp.py", "pass\n");
+    write_file(root / ".gitignore", "*.tmp.py\n");
+
+    const std::string init_cmd = "git -C \"" + root.string() + "\" init -q";
+    REQUIRE(run_silently(init_cmd) == 0);
+
+    const auto found = FileWalker{}.walk(root, registry);
+    REQUIRE(contains(found, root / "src" / "kept.py"));
+    REQUIRE_FALSE(contains(found, root / "src" / "scratch.tmp.py"));
+    REQUIRE_FALSE(contains(found, root / "deep" / "nested" / "throwaway.tmp.py"));
+}
+
+TEST_CASE("walker respects .gitignore negation patterns", "[walker][git]") {
+    if (!git_available()) {
+        SUCCEED("git not on PATH; skipping negation test");
+        return;
+    }
+
+    const auto registry = load_repo_registry();
+    const auto root = make_tmp_root();
+
+    // Ignore everything in build/, then re-include build/keep.py
+    // via the leading '!' negation.
+    write_file(root / "build" / "drop1.py", "pass\n");
+    write_file(root / "build" / "drop2.py", "pass\n");
+    write_file(root / "build" / "keep.py", "pass\n");
+    write_file(root / ".gitignore", "build/*\n!build/keep.py\n");
+
+    const std::string init_cmd = "git -C \"" + root.string() + "\" init -q";
+    REQUIRE(run_silently(init_cmd) == 0);
+
+    const auto found = FileWalker{}.walk(root, registry);
+    REQUIRE(contains(found, root / "build" / "keep.py"));
+    REQUIRE_FALSE(contains(found, root / "build" / "drop1.py"));
+    REQUIRE_FALSE(contains(found, root / "build" / "drop2.py"));
+}
+
+TEST_CASE("walker honours nested .gitignore at deeper directory levels", "[walker][git]") {
+    if (!git_available()) {
+        SUCCEED("git not on PATH; skipping nested-gitignore test");
+        return;
+    }
+
+    const auto registry = load_repo_registry();
+    const auto root = make_tmp_root();
+
+    // Top-level .gitignore is empty (just to make this a real
+    // git-aware tree); the nested module/.gitignore is the one
+    // that drops module/secret.py.
+    write_file(root / "module" / "kept.py", "def x(): pass\n");
+    write_file(root / "module" / "secret.py", "pass\n");
+    write_file(root / "module" / ".gitignore", "secret.py\n");
+    write_file(root / ".gitignore", "");
+
+    const std::string init_cmd = "git -C \"" + root.string() + "\" init -q";
+    REQUIRE(run_silently(init_cmd) == 0);
+
+    const auto found = FileWalker{}.walk(root, registry);
+    REQUIRE(contains(found, root / "module" / "kept.py"));
+    REQUIRE_FALSE(contains(found, root / "module" / "secret.py"));
+}
+
+TEST_CASE("walker keeps .git directory itself out of the file set", "[walker][git]") {
+    if (!git_available()) {
+        SUCCEED("git not on PATH; skipping .git filter test");
+        return;
+    }
+
+    const auto registry = load_repo_registry();
+    const auto root = make_tmp_root();
+
+    write_file(root / "src" / "kept.py", "def main(): pass\n");
+    const std::string init_cmd = "git -C \"" + root.string() + "\" init -q";
+    REQUIRE(run_silently(init_cmd) == 0);
+
+    // git ls-files never lists files under .git/ in the first
+    // place, so we just need to assert the walker output is clean.
+    // This is the safety property: even if a .py snuck inside .git
+    // somehow (config templates, hooks, …) the walker must skip it.
+    const auto found = FileWalker{}.walk(root, registry);
+    for (const auto& p : found) {
+        const auto rel = std::filesystem::relative(p, root).generic_string();
+        REQUIRE(rel.find(".git/") != 0);
+        REQUIRE(rel != ".git");
+    }
+}
+
+TEST_CASE("walker fallback (non-git) still drops universal-skip directories",
+          "[walker][fallback]") {
+    // This exercises the path triggered when try_git_ls_files
+    // fails — typically because the root is not inside a working
+    // tree. make_tmp_root never runs `git init`, so the walker
+    // falls through to the recursive_directory_iterator branch.
+    // We assert the small hardcoded skip list still kicks in.
+    const auto registry = load_repo_registry();
+    const auto root = make_tmp_root();
+
+    write_file(root / "src" / "kept.py", "def main(): pass\n");
+    write_file(root / "node_modules" / "lodash" / "index.js", "module.exports={};\n");
+    write_file(root / "__pycache__" / "cached.py", "# bytecode\n");
+    write_file(root / "target" / "debug" / "junk.rs", "fn x() {}\n");
+    write_file(root / "build" / "out.cpp", "int main() {}\n");
+    write_file(root / ".vectra" / "secret.py", "# vectra state\n");
+
+    const auto found = FileWalker{}.walk(root, registry);
+    REQUIRE(contains(found, root / "src" / "kept.py"));
+    REQUIRE_FALSE(contains(found, root / "node_modules" / "lodash" / "index.js"));
+    REQUIRE_FALSE(contains(found, root / "__pycache__" / "cached.py"));
+    REQUIRE_FALSE(contains(found, root / "target" / "debug" / "junk.rs"));
+    REQUIRE_FALSE(contains(found, root / "build" / "out.cpp"));
+    REQUIRE_FALSE(contains(found, root / ".vectra" / "secret.py"));
+}
+
+TEST_CASE("walker fallback no longer drops framework-specific dirs (.next etc)",
+          "[walker][fallback]") {
+    // The fallback skip list intentionally shrunk: framework
+    // build dirs (.next, .turbo, .svelte-kit, .astro) are no
+    // longer in it because every modern project's .gitignore
+    // covers them. Outside a git repo the walker shows them —
+    // that's acceptable because the user is in a non-tracked
+    // ad-hoc directory and we have no signal otherwise.
+    const auto registry = load_repo_registry();
+    const auto root = make_tmp_root();
+
+    write_file(root / ".next" / "page.js", "module.exports={};\n");
+
+    const auto found = FileWalker{}.walk(root, registry);
+    REQUIRE(contains(found, root / ".next" / "page.js"));
+}
