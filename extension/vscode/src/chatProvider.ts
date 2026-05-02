@@ -111,6 +111,7 @@ export class VectraChatPanel {
     private readonly extensionUri: vscode.Uri;
     private readonly storage: ChatStorage;
     private readonly bridge: PermissionBridge;
+    private readonly output: vscode.OutputChannel;
     private readonly disposables: vscode.Disposable[] = [];
     private readonly active = new Map<string, cp.ChildProcess>();
     // Temp files (MCP config) we wrote for in-flight runs. Cleaned
@@ -132,6 +133,7 @@ export class VectraChatPanel {
         extensionUri: vscode.Uri,
         storage: ChatStorage,
         bridge: PermissionBridge,
+        output: vscode.OutputChannel,
     ): void {
         const column = vscode.ViewColumn.Beside;
 
@@ -157,7 +159,13 @@ export class VectraChatPanel {
         const iconUri = vscode.Uri.joinPath(extensionUri, 'media', 'icon.svg');
         panel.iconPath = { light: iconUri, dark: iconUri };
 
-        VectraChatPanel.current = new VectraChatPanel(panel, extensionUri, storage, bridge);
+        VectraChatPanel.current = new VectraChatPanel(
+            panel,
+            extensionUri,
+            storage,
+            bridge,
+            output,
+        );
     }
 
     public static newChat(): void {
@@ -173,11 +181,13 @@ export class VectraChatPanel {
         extensionUri: vscode.Uri,
         storage: ChatStorage,
         bridge: PermissionBridge,
+        output: vscode.OutputChannel,
     ) {
         this.panel = panel;
         this.extensionUri = extensionUri;
         this.storage = storage;
         this.bridge = bridge;
+        this.output = output;
 
         this.panel.webview.html = this.renderHtml(this.panel.webview);
 
@@ -191,6 +201,9 @@ export class VectraChatPanel {
         // request to the chat panel as a permissionRequest message.
         // The webview owns the modal queue; we just route.
         this.bridge.setListener((req: PermissionRequest) => {
+            this.output.appendLine(
+                `[chat] forwarding approval ${req.requestId} tool=${req.toolName} → webview`,
+            );
             this.post({
                 type: 'permissionRequest',
                 requestId: req.requestId,
@@ -379,6 +392,9 @@ export class VectraChatPanel {
                 void this.handleSaveSession(m);
                 break;
             case 'permissionResponse':
+                this.output.appendLine(
+                    `[chat] decision from webview ${m.requestId} → ${m.decision}`,
+                );
                 this.bridge.resolve(m.requestId, {
                     decision: m.decision,
                     reason:

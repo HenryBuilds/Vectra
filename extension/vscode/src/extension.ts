@@ -229,7 +229,12 @@ export function activate(context: vscode.ExtensionContext): void {
     // chat panel registers its listener once on first openChat. Bind
     // synchronously so listen() finishes before any chat panel
     // tries to writeMcpConfig() against bridge.url.
-    const bridge = new PermissionBridge();
+    //
+    // Pass the output channel so the bridge logs each request /
+    // resolve / denyAll into "Vectra" — the approval chain is four
+    // hops long (webview → host → bridge → MCP → claude) and those
+    // logs are what we lean on when something hangs.
+    const bridge = new PermissionBridge(output);
     void bridge.start().catch((err) => {
         output.appendLine(
             `[vectra: permission bridge failed to start: ${err instanceof Error ? err.message : String(err)}]`,
@@ -249,7 +254,7 @@ export function activate(context: vscode.ExtensionContext): void {
             VectraChatPanel.showHistory(),
         ),
         vscode.commands.registerCommand('vectra.openChat', () => {
-            VectraChatPanel.createOrShow(context.extensionUri, storage, bridge);
+            VectraChatPanel.createOrShow(context.extensionUri, storage, bridge, output);
         }),
     );
 

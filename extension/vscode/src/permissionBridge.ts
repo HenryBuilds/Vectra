@@ -44,13 +44,22 @@ export class PermissionBridge implements vscode.Disposable {
     private readonly server: http.Server;
     private readonly token: string;
     private readonly pending: Map<string, Resolver> = new Map();
+    private readonly log: (msg: string) => void;
     private port: number = 0;
     private nextRequestId = 0;
     private listener: ((req: PermissionRequest) => void) | undefined;
 
-    constructor() {
+    constructor(output?: vscode.OutputChannel) {
         this.token = crypto.randomBytes(24).toString('hex');
         this.server = http.createServer((req, res) => this.handle(req, res));
+        // Lifecycle logger: every approval round-trip touches the
+        // bridge twice (incoming HTTP from the MCP server + resolve()
+        // from the chat panel). Writing both to the Vectra output
+        // channel is the cheapest way to diagnose "Apply clicked but
+        // nothing happened" issues — the chain is webview → host →
+        // bridge → MCP → claude and any of those four hops can drop
+        // a message silently.
+        this.log = output ? (m) => output.appendLine(`[bridge] ${m}`) : () => {};
     }
 
     /**
@@ -103,9 +112,14 @@ export class PermissionBridge implements vscode.Disposable {
     resolve(requestId: string, response: PermissionResponse): void {
         const resolver = this.pending.get(requestId);
         if (!resolver) {
+            this.log(
+                `resolve(${requestId}) — no resolver. ` +
+                    `pending=[${[...this.pending.keys()].join(',')}]`,
+            );
             return;
         }
         this.pending.delete(requestId);
+        this.log(`resolve(${requestId}) decision=${response.decision}`);
         resolver(response);
     }
 
@@ -115,6 +129,9 @@ export class PermissionBridge implements vscode.Disposable {
      * holds so the MCP server's HTTP awaiters do not leak.
      */
     denyAll(reason: string): void {
+        if (this.pending.size > 0) {
+            this.log(`denyAll: clearing ${this.pending.size} pending — ${reason}`);
+        }
         for (const [, resolver] of this.pending) {
             resolver({ decision: 'deny', reason });
         }
@@ -173,10 +190,16 @@ export class PermissionBridge implements vscode.Disposable {
                 toolInput: body.tool_input ?? {},
                 toolUseId: body.tool_use_id ?? '',
             };
+            this.log(
+                `incoming approval ${requestId} tool=${request.toolName} useId=${request.toolUseId}`,
+            );
 
             // Stash the resolver so chatProvider can settle it once
             // the webview produces a decision.
             this.pending.set(requestId, (response) => {
+                this.log(
+                    `flushing HTTP response ${requestId} decision=${response.decision}`,
+                );
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify(response));
             });
