@@ -627,6 +627,15 @@ button.source-item:focus {
     border-radius: 6px;
     background: var(--vscode-editor-background);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    /* Flex column with a hard cap so the modal can never push the
+     * Approve / Deny actions below the viewport: body grows, but
+     * caps at (modal max-height − header − actions) and scrolls
+     * its own contents. */
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    max-height: 50vh;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -636,6 +645,7 @@ button.source-item:focus {
     gap: 6px;
     padding: 10px 12px 6px 12px;
     font-size: 12px;
+    flex: 0 0 auto;
 }
 
 .permission-tool {
@@ -651,7 +661,8 @@ button.source-item:focus {
 .permission-body {
     padding: 4px 12px 8px 12px;
     font-size: 12px;
-    max-height: 240px;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
 }
 
@@ -737,6 +748,8 @@ button.source-item:focus {
     gap: 8px;
     padding: 8px 12px 10px 12px;
     border-top: 1px solid var(--vscode-panel-border);
+    flex: 0 0 auto;
+    background: var(--vscode-editor-background);
 }
 
 .permission-btn {
