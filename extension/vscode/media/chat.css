@@ -674,9 +674,125 @@ button.source-item:focus {
     word-break: break-all;
 }
 
+.permission-file-link {
+    display: block;
+    width: 100%;
+    margin: 0 0 6px 0;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    color: var(--vscode-textLink-foreground);
+    word-break: break-all;
+}
+
+.permission-file-link:hover {
+    text-decoration: underline;
+    color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+}
+
 .permission-desc {
     color: var(--vscode-foreground);
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    line-height: 1.4;
+}
+
+.permission-meta {
+    margin: 4px 0;
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+
+/* ---- Bash command block + risk badge ---------------------------- */
+
+.permission-bash {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 4px 0;
+}
+
+.permission-bash-cmd {
+    margin: 0;
+    padding: 8px 10px;
+    background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
+    border-left: 3px solid var(--vscode-textLink-foreground);
+    border-radius: 3px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--vscode-foreground);
+}
+
+.permission-risk {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.permission-risk-low {
+    background: var(--vscode-charts-green, rgba(0, 200, 0, 0.18));
+    color: var(--vscode-foreground);
+    opacity: 0.7;
+}
+
+.permission-risk-medium {
+    background: var(--vscode-charts-yellow, rgba(255, 200, 0, 0.25));
+    color: var(--vscode-foreground);
+}
+
+.permission-risk-high {
+    background: var(--vscode-errorForeground, rgba(255, 80, 80, 0.6));
+    color: var(--vscode-button-foreground, #fff);
+}
+
+.permission-risk-flags {
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    opacity: 0.85;
+}
+
+/* ---- Write tool content preview --------------------------------- */
+
+.permission-write-content {
+    margin: 0;
+    padding: 8px 10px;
+    background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
+    border-radius: 3px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    white-space: pre;
+    overflow-x: auto;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.permission-toggle {
+    margin-top: 4px;
+    padding: 2px 8px;
+    background: transparent;
+    border: 1px solid var(--vscode-panel-border);
+    color: var(--vscode-textLink-foreground);
+    border-radius: 3px;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.permission-toggle:hover {
+    background: var(--vscode-toolbar-hoverBackground);
 }
 
 .permission-diff {
