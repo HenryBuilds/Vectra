@@ -714,6 +714,23 @@ button.source-item:focus {
     border-radius: 3px;
 }
 
+.permission-raw {
+    margin-top: 6px;
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.permission-raw > summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 2px 0;
+    opacity: 0.75;
+}
+
+.permission-raw[open] > summary {
+    margin-bottom: 4px;
+}
+
 .permission-actions {
     display: flex;
     justify-content: flex-end;

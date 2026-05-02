@@ -194,11 +194,34 @@ async function handleRequest(req) {
                 return;
             }
             const args = params.arguments ?? {};
-            const decision = await decide(
-                args.tool_name ?? '',
-                args.tool_input ?? {},
-                args.tool_use_id ?? '',
-            );
+            // Diagnostic: dump the raw arguments object so we can
+            // confirm the field names claude actually sends. Stderr
+            // is forwarded into Vectra's output channel verbatim.
+            try {
+                process.stderr.write(
+                    `vectra-mcp: tools/call args=${JSON.stringify(args).slice(0, 1000)}\n`,
+                );
+            } catch {
+                // Best-effort; never let logging break the call.
+            }
+            // Be lenient about field names: the agent's spec said
+            // {tool_name, tool_input, tool_use_id} but real claude
+            // builds may emit camelCase or rename `tool_input` to
+            // `input`. Try a few before falling back to empties.
+            const toolName =
+                (typeof args.tool_name === 'string' && args.tool_name) ||
+                (typeof args.toolName === 'string' && args.toolName) ||
+                '';
+            const toolInput =
+                (typeof args.tool_input === 'object' && args.tool_input) ||
+                (typeof args.toolInput === 'object' && args.toolInput) ||
+                (typeof args.input === 'object' && args.input) ||
+                {};
+            const toolUseId =
+                (typeof args.tool_use_id === 'string' && args.tool_use_id) ||
+                (typeof args.toolUseId === 'string' && args.toolUseId) ||
+                '';
+            const decision = await decide(toolName, toolInput, toolUseId);
             jsonResult(id, {
                 content: [{ type: 'text', text: JSON.stringify(decision) }],
             });
