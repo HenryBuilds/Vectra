@@ -4,12 +4,14 @@ add_executable(vectra_core_tests
     chunker_test.cpp
     hash_test.cpp
     language_test.cpp
+    parse_validation_test.cpp
 )
 
 target_link_libraries(vectra_core_tests
     PRIVATE
         vectra::core
         vectra::compile_options
+        vectra::tree_sitter
         Catch2::Catch2WithMain
 )
 
