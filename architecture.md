@@ -50,8 +50,22 @@ flowchart LR
 
 Code path: [`src/cli/walker.cpp`](src/cli/walker.cpp), [`src/cli/index_command.cpp`](src/cli/index_command.cpp), [`src/core/`](src/core/), [`src/store/`](src/store/).
 
-- Walker enumerates the project tree, filters out `build/`, `.git/`,
-  `node_modules/`, and similar.
+- Walker enumerates the project tree. Inside a git working tree
+  it shells out to `git ls-files --cached --others
+  --exclude-standard` and uses the result as the file set, so
+  `.gitignore` (at any depth), `.git/info/exclude`, and the user's
+  global gitignore are all honoured for free without any
+  pattern-parsing on our side. Outside a git repo it falls back to
+  a recursive directory iterator with a small universal-skip list
+  (`.git`, `node_modules`, `__pycache__`, `target`, `build`,
+  `dist`, `out`, `vendor`, plus the Vectra state dirs). The
+  framework-specific entries the fallback used to carry (`.next`,
+  `.turbo`, `.svelte-kit`, …) are gone — they are reliably in
+  every modern project's `.gitignore` so the git path skips them
+  automatically. A real bonus of this switch: `.env*` files drop
+  out by default, closing a secret-leak vector where API keys
+  could otherwise land in the embedding index and be sent to
+  claude as context.
 - Tree-sitter parses each supported file (C, C++, Python, JS, TS,
   Rust, Go) into an AST.
 - The chunker emits one chunk per top-level symbol (function, class,
@@ -222,7 +236,50 @@ ID, so the same UUID across multiple `vectra ask` invocations gives
 the user a real multi-turn conversation. Vectra never reads or
 writes the transcript itself — it only forwards the UUID.
 
-### 7. VS Code extension
+### 7. Stream-JSON wire format
+
+Code path: [`src/cli/ask_command.cpp`](src/cli/ask_command.cpp), [`extension/vscode/src/chatProvider.ts`](extension/vscode/src/chatProvider.ts).
+
+`vectra ask --stream-json` switches the assistant turn from plain
+text on stdout to **newline-delimited JSON** events. This is what
+the VS Code extension always uses — terminal users keep the text
+default. The flag forwards three options to claude in lockstep:
+
+- `--output-format=stream-json` — wire format
+- `--include-partial-messages` — token-level deltas (otherwise
+  events only fire per-block, which feels like batch output)
+- `--verbose` — required by `--print` mode to actually emit the
+  events instead of silently suppressing them as "internal"
+
+Vectra piggybacks on the same NDJSON channel to inject its own
+side-channel events. The first one is `vectra_event/context`,
+emitted on stdout right before claude is spawned, carrying the
+retrieved chunks (file path, line range, symbol, kind) as a JSON
+list. UI clients use it to pre-render a Sources footer that fills
+in while claude is still composing the answer below.
+
+The full event vocabulary on stdout, in encounter order for one
+turn:
+
+| event | source | purpose |
+|---|---|---|
+| `vectra_event` (subtype `context`) | vectra | retrieved chunks list |
+| `system` (subtype `init`) | claude | session_id, model, cwd |
+| `stream_event` / `message_start` | claude | turn begins |
+| `stream_event` / `content_block_start` | claude | new block (text / tool_use / thinking) |
+| `stream_event` / `content_block_delta` | claude | append to current block |
+| `stream_event` / `content_block_stop` | claude | block finished |
+| `stream_event` / `message_delta` | claude | usage update |
+| `stream_event` / `message_stop` | claude | turn ends |
+| `assistant` | claude | full assistant message (re-emit, ignored) |
+| `user` (with `tool_result` blocks) | claude | tool returned |
+| `result` | claude | final usage / cost / duration |
+
+Lines that fail JSON.parse are forwarded as plain text chunks so
+that older claude binaries or pre-stream-json error output still
+show up instead of being silently dropped.
+
+### 8. VS Code extension
 
 Code path: [`extension/vscode/`](extension/vscode/).
 
@@ -231,8 +288,28 @@ Code path: [`extension/vscode/`](extension/vscode/).
   Same UX as Anthropic's official Claude Code extension.
 - React webview (bundled by esbuild into `out/webview.js`) renders
   the chat. The host (TypeScript, in `chatProvider.ts`) owns the
-  `vectra ask` subprocess per turn and streams stdout/stderr to the
-  webview via `postMessage`.
+  `vectra ask` subprocess per turn and parses claude's NDJSON
+  stdout into typed messages it forwards to the webview via
+  `postMessage`. Stderr (the retrieval pipeline summary) flows
+  through unchanged as a "meta" line above the assistant body.
+- The webview models each assistant turn as an ordered list of
+  blocks (`text`, `tool_use`, `thinking`) plus optional `sources`
+  and `usage`:
+  - **Text blocks** stream in via `text_delta` events, accumulating
+    into the visible body.
+  - **Tool-use blocks** render as a collapsible badge with a
+    running / ok / error status pill; expanding shows the tool's
+    input JSON and (when settled) the matching `tool_result`. The
+    user can see exactly which tools claude invoked and what came
+    back.
+  - **Thinking blocks** (extended-thinking output) collapse by
+    default behind a dashed border so the answer stays prominent
+    but is still auditable.
+  - **Sources footer** (from `vectra_event/context`) lists each
+    retrieved chunk as `<symbol> file:line` clickable to open the
+    file at the chunk's start line.
+  - **Usage line** (from `result`) shows token in / out, cached
+    tokens, USD cost, and wall-clock duration in monospace.
 - Session continuity is plumbed through:
   - On panel construction, generate a `crypto.randomUUID()`.
   - First send → spawn `vectra ask … --session-id <uuid>`.
@@ -302,6 +379,19 @@ The win is one less filesystem round-trip per turn. The cost is
 ~150 lines of cross-platform `CreateProcess` / `posix_spawn` code
 plus Windows `.cmd` resolution, which carries real regression risk
 for negligible speedup at our prompt sizes (low-KB). Deferred.
+
+**`git ls-files` for the walker, not a homegrown `.gitignore`
+parser.** A correct `.gitignore` implementation handles glob
+patterns, anchored vs unanchored, dir-only trailing slash,
+negation, multi-level files at every directory depth,
+`.git/info/exclude`, and the user's global gitignore. That's a
+800–1500-LOC vendored library or a hand-rolled parser of similar
+size. Shelling out to `git ls-files` gets all of that for free
+because git itself is doing the work — at the cost of a fork+exec
+per index run (~10–50ms one-shot, irrelevant at indexing-time
+scale) and a hard dependency on `git` being on PATH inside a git
+repo. Outside a git repo we fall back to a small hardcoded list,
+which is fine for the rare non-git use case.
 
 **ANTHROPIC_API_KEY stripped from child env.** Cursor, Windsurf, and
 various dev tools inject `ANTHROPIC_API_KEY` into their child
