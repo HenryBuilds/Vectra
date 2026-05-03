@@ -1,22 +1,87 @@
 {
-  "_comment": "Proof-of-concept tasks for the Vectra-vs-Claude-plain anecdote run. Each task is a question a real engineer would ask about an unfamiliar large codebase. Pick questions where (a) the answer is concrete (a function/file/line range, not 'discuss'), (b) Claude's training has plausibly seen kubernetes but the version drifts, and (c) the answer requires understanding more than one file.",
+  "_comment": "Vectra-vs-claude-alone benchmark over kubernetes/kubernetes. Each task is a research question a real engineer would ask about an unfamiliar large codebase: a question with a concrete, verifiable answer (a function name, a file path, an enum value) so the harness can grade pass/fail without a human in the loop. The `verify.must_contain` array is the anchor set: every string must appear (case-insensitive) in the assistant's text answer for that pipeline to count as having found the right code. Keep the anchors specific (function names, type names, distinctive file paths) — generic words ('pod', 'controller') would let bad answers pass.",
   "repo": "kubernetes/kubernetes",
+  "schema_version": 2,
   "tasks": [
     {
       "id": "scheduler-priority",
-      "question": "In the kube-scheduler, where is a Pod's priority used to decide which existing pods to preempt when there is no room? Name the function and the file."
+      "category": "research",
+      "question": "In the kube-scheduler, where is a Pod's priority used to decide which existing pods to preempt when there is no room? Name the function and the file.",
+      "verify": {
+        "must_contain": ["SelectVictimsOnNode", "default_preemption.go"]
+      }
     },
     {
       "id": "kubelet-eviction",
-      "question": "How does the kubelet decide which pods to evict under memory pressure? Walk me through the ranking logic and name the relevant types and functions."
+      "category": "research",
+      "question": "How does the kubelet decide which pods to evict under memory pressure? Walk me through the ranking logic and name the relevant types and functions.",
+      "verify": {
+        "must_contain": ["rankMemoryPressure", "exceedMemoryRequests"]
+      }
     },
     {
       "id": "admission-flow",
-      "question": "When a CREATE Pod request hits the API server, in what order do mutating and validating admission plugins run, and where is that ordering enforced in code?"
+      "category": "research",
+      "question": "When a CREATE Pod request hits the API server, in what order do mutating and validating admission plugins run, and where is that ordering enforced in code?",
+      "verify": {
+        "must_contain": ["AllOrderedPlugins", "chainAdmissionHandler"]
+      }
     },
     {
       "id": "leader-election",
-      "question": "How does kube-controller-manager's leader election work, and where is the lease-renewal interval configured?"
+      "category": "research",
+      "question": "How does kube-controller-manager's leader election work, and where is the lease-renewal interval configured?",
+      "verify": {
+        "must_contain": ["leaderElectAndRun", "RetryPeriod"]
+      }
+    },
+    {
+      "id": "apiserver-watch-cache",
+      "category": "research",
+      "question": "How does the apiserver's watch cache reduce etcd load? Name the central type that implements it and the file it lives in.",
+      "verify": {
+        "must_contain": ["Cacher", "cacher.go"]
+      }
+    },
+    {
+      "id": "iptables-proxier-sync",
+      "category": "research",
+      "question": "In kube-proxy iptables mode, what function recomputes the full iptables ruleset for Services, and roughly how is it triggered?",
+      "verify": {
+        "must_contain": ["syncProxyRules", "iptables"]
+      }
+    },
+    {
+      "id": "pdb-eviction",
+      "category": "research",
+      "question": "Where in the apiserver's eviction subresource is a PodDisruptionBudget actually enforced before allowing a pod to be evicted?",
+      "verify": {
+        "must_contain": ["checkAndDecrement", "DisruptionsAllowed"]
+      }
+    },
+    {
+      "id": "pod-qos-class",
+      "category": "research",
+      "question": "Find the function that classifies a Pod into a QoS class (Guaranteed / Burstable / BestEffort) and explain its decision rule.",
+      "verify": {
+        "must_contain": ["GetPodQOS"]
+      }
+    },
+    {
+      "id": "pprof-routes",
+      "category": "research",
+      "question": "Where in the apiserver's HTTP routing layer are the /debug/pprof/ endpoints registered?",
+      "verify": {
+        "must_contain": ["profiling.go", "EnableProfiling"]
+      }
+    },
+    {
+      "id": "scheduler-queue",
+      "category": "research",
+      "question": "How does the scheduler's PriorityQueue order pods waiting to be scheduled? Name the type, the file it lives in, and the sub-queues it maintains.",
+      "verify": {
+        "must_contain": ["PriorityQueue", "scheduling_queue"]
+      }
     }
   ]
 }

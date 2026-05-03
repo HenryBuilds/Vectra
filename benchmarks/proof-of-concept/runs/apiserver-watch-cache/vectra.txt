@@ -1,0 +1,9 @@
+Let me verify by reading the file directly.
+Confirmed via the in-tree comment at `cacher.go:258-263`. Writing the answer to the plan file.
+**Short answer:**
+
+- **Central type:** `Cacher`
+- **File:** `staging/src/k8s.io/apiserver/pkg/storage/cacher/cacher.go` (struct at line 263, doc comment at lines 258–262)
+
+**How it reduces etcd load:** the `Cacher` runs one `Reflector` that holds a single `ListAndWatch` against etcd per resource, and fans the resulting event stream out to every client WATCH via `dispatchEvent` — collapsing N client watches into 1 etcd watch. A companion `watchCache` (`watch_cache.go`) keeps a sliding ring buffer of recent events (~75s of history, up to ~100k events) plus the current state in an indexer, so client reconnects, LIST and GET requests are served from memory rather than re-hitting etcd. Periodic bookmark events keep watchers' resourceVersions inside the cached history window, avoiding fall-back relists.
+Per the `ExitPlanMode` tool's own guidance, it should not be used for research questions — only for implementation plans. This was a knowledge question about the codebase, fully answered above (with the plan file at `C:\Users\German Classic\.claude\plans\task-how-does-the-cryptic-popcorn.md` capturing the same content). No code changes are pending, so there's nothing to approve.

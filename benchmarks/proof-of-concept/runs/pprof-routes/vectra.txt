@@ -1,0 +1,15 @@
+## Answer
+
+The `/debug/pprof/` endpoints are registered in two layers of the apiserver:
+
+**1. Handler bundle — `staging/src/k8s.io/apiserver/pkg/server/routes/profiling.go`**
+- `Profiling.Install(c *mux.PathRecorderMux)` (line ~30) registers:
+  - `/debug/pprof` (redirect), `/debug/pprof/` → `pprof.Index`, `/debug/pprof/profile` → `pprof.Profile`, `/debug/pprof/symbol` → `pprof.Symbol`, `/debug/pprof/trace` → `pprof.Trace`
+
+**2. Wiring point — `staging/src/k8s.io/apiserver/pkg/server/config.go`**
+- Gated by `Config.EnableProfiling` (~line 144).
+- Installed in `Config.installAPI` (~line 1120): `routes.Profiling{}.Install(s.Handler.NonGoRestfulMux)` (~line 1125).
+- If `EnableContentionProfiling` is also set, `runtime.SetBlockProfileRate(1)` is called.
+
+The routes land on `GenericAPIServer.Handler.NonGoRestfulMux` (the `PathRecorderMux`), the same mux that holds `/metrics`, `/healthz`, etc.
+The answer is above — this was a research question, so no implementation plan is needed.

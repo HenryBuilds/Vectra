@@ -1,0 +1,79 @@
+{
+  "id": "pprof-routes",
+  "vectra": {
+    "wall_seconds": 55.16,
+    "result": {
+      "duration_ms": 54034,
+      "total_cost_usd": 0.42780285000000007,
+      "num_turns": 4,
+      "usage": {
+        "input_tokens": 13,
+        "cache_creation_input_tokens": 41768,
+        "cache_read_input_tokens": 113773,
+        "output_tokens": 2800,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 41768,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [
+          {
+            "input_tokens": 6,
+            "output_tokens": 398,
+            "cache_read_input_tokens": 19413,
+            "cache_creation_input_tokens": 21628,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 21628
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      }
+    }
+  },
+  "claude": {
+    "wall_seconds": 101.41,
+    "result": {
+      "duration_ms": 100267,
+      "total_cost_usd": 0.487191,
+      "num_turns": 4,
+      "usage": {
+        "input_tokens": 14,
+        "cache_creation_input_tokens": 39951,
+        "cache_read_input_tokens": 110198,
+        "output_tokens": 3934,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 39951,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [
+          {
+            "input_tokens": 6,
+            "output_tokens": 1006,
+            "cache_read_input_tokens": 19413,
+            "cache_creation_input_tokens": 20493,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 20493
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      }
+    }
+  }
+}

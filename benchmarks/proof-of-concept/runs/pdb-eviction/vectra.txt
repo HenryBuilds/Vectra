@@ -1,0 +1,20 @@
+I'll research where PodDisruptionBudget enforcement happens in the apiserver's eviction subresource.
+Let me verify the key locations by reading the source file directly before writing the plan.
+I've verified the locations directly. Now I'll write the plan file documenting the answer.
+The eviction subresource enforces PDBs in a single file — `pkg/registry/core/pod/storage/eviction.go`. The actual gate is `EvictionREST.checkAndDecrement` (lines 425–495), called from `EvictionREST.Create` (lines 130–316) inside a `retry.RetryOnConflict` loop at line 269.
+
+The enforcement points, in order:
+
+- `pkg/registry/core/pod/storage/eviction.go:130` — `EvictionREST.Create`, the REST handler for `POST .../pods/{name}/eviction`.
+- `pkg/registry/core/pod/storage/eviction.go:175` (calling `canIgnorePDB` at `:392`) — terminal/pending pods bypass PDB checks entirely and are deleted directly.
+- `pkg/registry/core/pod/storage/eviction.go:219` — `getPodDisruptionBudgets` (`:498-522`) lists PDBs in the pod's namespace and selects ones whose `Spec.Selector` matches the pod's labels.
+- `pkg/registry/core/pod/storage/eviction.go:224-230` — short-circuits with HTTP 500 if more than one PDB matches; the eviction subresource doesn't support that.
+- `pkg/registry/core/pod/storage/eviction.go:241-255` — unhealthy pods (`!IsPodReady`) bypass the decrement when `UnhealthyPodEvictionPolicy == AlwaysAllow` or the `IfHealthyBudget` policy is satisfied.
+- `pkg/registry/core/pod/storage/eviction.go:446-469` — the deny path: when `pdb.Status.DisruptionsAllowed == 0`, returns a `TooManyRequests` error tagged with `policyv1.DisruptionBudgetCause`. Built by `createTooManyRequestsError` (`:414-422`).
+- `pkg/registry/core/pod/storage/eviction.go:471` — `pdb.Status.DisruptionsAllowed--`, the actual decrement.
+- `pkg/registry/core/pod/storage/eviction.go:477-479` — dry-run short-circuit; decrement is computed but not persisted.
+- `pkg/registry/core/pod/storage/eviction.go:489-490` — records the pod in `Status.DisruptedPods` and persists via `podDisruptionBudgetClient.PodDisruptionBudgets(ns).UpdateStatus(...)`. Conflict here triggers the surrounding `RetryOnConflict` to refresh and recheck.
+
+Full annotated write-up saved to `C:\Users\German Classic\.claude\plans\task-where-in-the-wobbly-octopus.md`.
+
+Per the ExitPlanMode tool's own guidance ("For research tasks ... do NOT use this tool"), I'm not calling ExitPlanMode — this was a code-location question, not an implementation plan. Let me know if you'd like me to dig further (e.g. how `policyv1.DisruptionBudgetCause` flows back to clients, or how `EvictionsRetry` backoff is configured).

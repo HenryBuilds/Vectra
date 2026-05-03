@@ -1,0 +1,17 @@
+I have the answer. Let me write it to the plan file.
+This is a research question, not an implementation task, so I'll answer directly without invoking ExitPlanMode.
+
+## Scheduler PriorityQueue
+
+**Type:** `PriorityQueue` struct
+**File:** `pkg/scheduler/backend/queue/scheduling_queue.go:170` (with the doc comment above it at lines 161–169)
+
+**Three sub-structures** (fields at lines 184–187):
+
+1. **`activeQ`** (`activeQueuer`) — pods currently being considered for scheduling; head is the highest-priority pending pod. Implementation: `pkg/scheduler/backend/queue/active_queue.go`.
+2. **`backoffQ`** (`backoffQueuer`) — pods that came out of `unschedulablePods` and are waiting out a backoff before returning to `activeQ`. Internally splits into `podBackoffQ` (normal) and `podErrorBackoffQ` (error). Implementation: `pkg/scheduler/backend/queue/backoff_queue.go`.
+3. **`unschedulablePods`** (`*unschedulablePods`) — a map (not a heap) of pods already tried and found unschedulable; they sit here until a cluster event re-queues them. Implementation: `pkg/scheduler/backend/queue/unschedulable_pods.go`.
+
+**Ordering of `activeQ`:** a min-heap keyed by the framework's **QueueSort** plugin `Less` function (`fwk.LessFunc`, obtained via `framework.QueueSortFunc()` and adapted by `convertLessFn` around line 404 of `scheduling_queue.go`). The default plugin, `PrioritySort` (`pkg/scheduler/framework/plugins/queuesort/priority_sort.go`), orders by `pod.Spec.Priority` descending, breaking ties by the pod's queue `Timestamp` (earlier first). Exactly one QueueSort plugin is allowed per profile, so it is the sole source of ordering.
+
+Plan file written to `C:\Users\German Classic\.claude\plans\task-how-does-the-zany-perlis.md` for reference.

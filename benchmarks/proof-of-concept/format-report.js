@@ -54,6 +54,32 @@ function loadAnswer(id, side) {
     return text || '(empty)';
 }
 
+// Grade an answer against the task's verify.must_contain anchors.
+// Returns { passed: boolean, missing: string[] }. Case-insensitive
+// substring match — generous on purpose, since the anchors are
+// already chosen to be discriminating identifiers (function names,
+// distinctive file basenames). The grade is a "did the model
+// actually find the right code" signal, not a quality check.
+function grade(answer, verify) {
+    if (!verify || !Array.isArray(verify.must_contain) || verify.must_contain.length === 0) {
+        return { passed: null, missing: [] };
+    }
+    const haystack = answer.toLowerCase();
+    const missing = [];
+    for (const needle of verify.must_contain) {
+        if (!haystack.includes(String(needle).toLowerCase())) {
+            missing.push(needle);
+        }
+    }
+    return { passed: missing.length === 0, missing };
+}
+
+function gradeIcon(passed) {
+    if (passed === true) return '✓';
+    if (passed === false) return '✗';
+    return '—';
+}
+
 function metric(meta, side, key) {
     return meta?.[side]?.result?.usage?.[key];
 }
@@ -105,6 +131,7 @@ function main() {
     const rows = [];
     let vTotCtx = 0, vTotOut = 0, vTotUsd = 0, vTotSec = 0, vTotTurns = 0;
     let cTotCtx = 0, cTotOut = 0, cTotUsd = 0, cTotSec = 0, cTotTurns = 0;
+    let vGraded = 0, vPassed = 0, cGraded = 0, cPassed = 0;
 
     for (const task of tasks) {
         const meta = loadMeta(task.id);
@@ -120,19 +147,35 @@ function main() {
         const cSec = meta.claude.wall_seconds ?? 0;
         const cTurns = meta.claude.result?.num_turns ?? 0;
 
+        const vGrade = grade(loadAnswer(task.id, 'vectra'), task.verify);
+        const cGrade = grade(loadAnswer(task.id, 'claude'), task.verify);
+        if (vGrade.passed !== null) {
+            vGraded += 1;
+            if (vGrade.passed) vPassed += 1;
+        }
+        if (cGrade.passed !== null) {
+            cGraded += 1;
+            if (cGrade.passed) cPassed += 1;
+        }
+
         vTotCtx += vCtx; vTotOut += vOut; vTotUsd += vUsd; vTotSec += vSec; vTotTurns += vTurns;
         cTotCtx += cCtx; cTotOut += cOut; cTotUsd += cUsd; cTotSec += cSec; cTotTurns += cTurns;
 
-        rows.push({ task, vCtx, vOut, vUsd, vSec, vTurns, cCtx, cOut, cUsd, cSec, cTurns });
+        rows.push({ task, vCtx, vOut, vUsd, vSec, vTurns, cCtx, cOut, cUsd, cSec, cTurns, vGrade, cGrade });
     }
 
     out.push('| metric | Vectra → Claude | Claude alone | Δ |');
     out.push('|---|---:|---:|---:|');
+    if (vGraded > 0 || cGraded > 0) {
+        out.push(`| **answers correct** (verifier hits) | **${vPassed} / ${vGraded}** | **${cPassed} / ${cGraded}** | — |`);
+    }
     out.push(`| context tokens processed (sum) | ${fmtTokens(vTotCtx)} | ${fmtTokens(cTotCtx)} | ${pct(vTotCtx, cTotCtx).trim() || '—'} |`);
     out.push(`| output tokens (sum) | ${fmtTokens(vTotOut)} | ${fmtTokens(cTotOut)} | ${pct(vTotOut, cTotOut).trim() || '—'} |`);
     out.push(`| total cost (USD) | ${fmtUsd(vTotUsd)} | ${fmtUsd(cTotUsd)} | ${pct(vTotUsd, cTotUsd).trim() || '—'} |`);
     out.push(`| wall-clock (sum) | ${fmtSec(vTotSec)} | ${fmtSec(cTotSec)} | ${pct(vTotSec, cTotSec).trim() || '—'} |`);
     out.push(`| turns (sum) | ${vTotTurns} | ${cTotTurns} | ${pct(vTotTurns, cTotTurns).trim() || '—'} |`);
+    out.push('');
+    out.push('"answers correct" = the assistant\'s text answer contains every `verify.must_contain` anchor for that task (case-insensitive). Anchors are picked so a wrong path does not accidentally pass.');
     out.push('');
     out.push('"context tokens processed" = `input_tokens + cache_creation + cache_read`, the actual prompt volume Claude saw (cache hits are still work, just billed cheaper).');
     out.push('');
@@ -147,8 +190,25 @@ function main() {
         out.push('');
         out.push(`> ${task.question}`);
         out.push('');
+        if (task.verify?.must_contain?.length) {
+            out.push(
+                `**Verifier anchors:** \`${task.verify.must_contain.map((s) => String(s)).join('` · `')}\``,
+            );
+            out.push('');
+        }
         out.push('| metric | Vectra → Claude | Claude alone |');
         out.push('|---|---:|---:|');
+        if (row.vGrade.passed !== null || row.cGrade.passed !== null) {
+            const vCell =
+                row.vGrade.passed === true
+                    ? '✓'
+                    : `✗ (missing: ${row.vGrade.missing.map((s) => `\`${s}\``).join(', ')})`;
+            const cCell =
+                row.cGrade.passed === true
+                    ? '✓'
+                    : `✗ (missing: ${row.cGrade.missing.map((s) => `\`${s}\``).join(', ')})`;
+            out.push(`| answer correct | ${vCell} | ${cCell} |`);
+        }
         out.push(`| context tokens processed | ${fmtTokens(row.vCtx)} | ${fmtTokens(row.cCtx)} |`);
         out.push(`| output tokens | ${fmtTokens(row.vOut)} | ${fmtTokens(row.cOut)} |`);
         out.push(`| total cost (USD) | ${fmtUsd(row.vUsd)} | ${fmtUsd(row.cUsd)} |`);

@@ -1,0 +1,21 @@
+## Answer
+
+**Central type:** `Cacher` (struct)
+**File:** `staging/src/k8s.io/apiserver/pkg/storage/cacher/cacher.go` (defined ~line 263)
+
+**Underlying buffer:** `watchCache` in `staging/src/k8s.io/apiserver/pkg/storage/cacher/watch_cache.go` — a cyclic ring buffer of recent events.
+
+**How it reduces etcd load (three mechanisms):**
+
+1. **One etcd watch, fan-out to N clients.** A single reflector inside the `Cacher` runs one `ListAndWatch` against etcd. Incoming events go into an `incoming` channel and a `dispatchEvents` goroutine multiplexes each event to every interested client watcher. Thousands of `kubectl get -w`/controller watches collapse into one etcd watch.
+
+2. **Ring buffer of recent events for resourceVersion replay.** `watchCache.cache` holds the last ~100–102,400 events. A client opening a watch at an older `resourceVersion` is replayed from this buffer (`getAllEventsSinceLocked`) before being attached to the live stream — etcd never sees the historical request.
+
+3. **LIST/GET served from in-memory store (and snapshots).** The cacher keeps a btree-backed snapshot of current state, so consistent and "any" reads, including paginated LISTs at a known RV, are answered from RAM. With the `ListFromCacheSnapshot` feature, point-in-time LISTs at older RVs are served from cached snapshots instead of an etcd range read.
+
+Net effect: etcd sees O(1) watch+list traffic per resource type instead of O(clients).
+
+---
+
+Since this was a pure explanatory question (no code change requested), there's nothing to implement. I'll record the answer in the plan file and exit plan mode.
+The answer is in my previous message — this was a research/explanatory question, so per the `ExitPlanMode` guidance ("For research tasks ... do NOT use this tool"), I'm not invoking it. Let me know if you want me to dig deeper into any of the three mechanisms or look at related code (e.g., the reflector, dispatcher, or snapshot store).

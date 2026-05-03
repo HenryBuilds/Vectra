@@ -1,0 +1,17 @@
+Your question is a code-locator one, not an implementation task — let me write up the answer as the "plan" since that's the only file I can edit in plan mode, then exit.
+This was a research question, so per the ExitPlanMode tool's own guidance I won't call it. Here's the direct answer:
+
+The enforcement lives in **`pkg/registry/core/pod/storage/eviction.go`**, and the single line that actually blocks an eviction because of a PDB is the `if pdb.Status.DisruptionsAllowed == 0` branch inside `EvictionREST.checkAndDecrement(...)` at roughly **eviction.go:446–469**, which returns a `429 TooManyRequests` with `DisruptionBudgetCause` before any pod deletion occurs.
+
+The flow that gets there, all in the same file:
+
+1. `EvictionREST.Create()` (~`:130`) — REST handler for `pods/eviction`.
+2. Terminal pods skip PDB logic via `canIgnorePDB` (~`:175–198`).
+3. `getPodDisruptionBudgets(ctx, pod)` (~`:498–522`) lists PDBs in the namespace and matches via `metav1.LabelSelectorAsSelector` + `selector.Matches(labels.Set(pod.Labels))`. More than one match is rejected (~`:224–230`).
+4. `UnhealthyPodEvictionPolicy` (`AlwaysAllow` / `IfHealthyBudget`) can short-circuit the budget check (~`:241–255`).
+5. The PDB read/check/update is wrapped in `retry.RetryOnConflict(EvictionsRetry, …)` (~`:257–275`); `EvictionsRetry` is defined at `:60–65`.
+6. `checkAndDecrement` (~`:425–495`) does, in order: ObservedGeneration check → 429, `DisruptionsAllowed < 0` → 403, `len(DisruptedPods) > 2000` → 403, **`DisruptionsAllowed == 0` → 429 (the real PDB gate)**, then `DisruptionsAllowed--` and `pdbhelper.UpdateDisruptionAllowedCondition`.
+7. Dry-run exits in memory (~`:476–479`); otherwise the pod is added to `pdb.Status.DisruptedPods` and persisted via `PodDisruptionBudgets(ns).UpdateStatus(...)` at ~`:490`.
+8. Only after that does `addConditionAndDeletePod` (~`:318–373`) validate `DeleteOptions.Preconditions` (UID/ResourceVersion), stamp the `DisruptionTarget` condition, and call `r.store.Delete(...)`.
+
+Supporting files: `pkg/registry/core/pod/storage/storage.go` wires `EvictionREST` into the pod storage; `staging/src/k8s.io/component-helpers/apps/poddisruptionbudget/helpers.go` provides `UpdateDisruptionAllowedCondition`. Full write-up with line numbers is in `~/.claude/plans/where-in-the-apiserver-s-binary-clover.md`.

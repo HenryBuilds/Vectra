@@ -1,0 +1,31 @@
+I'll find and read the QoS classification function. The references already point to `ComputePodQOS` — let me read it directly rather than spawn an Explore agent for a known path.
+Found the function. The codebase has two parallel copies (internal `core` types and external `v1` types). Let me also check the kubectl version that the comment references.
+I have what I need. This is a research/explanation task with no implementation to do — I'll write the findings to the plan file as the deliverable.
+Since this is a research/explanation task (not an implementation plan), `ExitPlanMode`'s own guidance says not to call it. Answering directly:
+
+## Function
+
+**`ComputePodQOS(pod)`** in `pkg/apis/core/helper/qos/qos.go:89-171` is the canonical implementation. `GetPodQOS` (same file, line 37) is the cheap wrapper: it returns `pod.Status.QOSClass` if already set, otherwise delegates to `ComputePodQOS`.
+
+The exact same logic is duplicated in two more files that must stay in sync:
+- `pkg/apis/core/v1/helper/qos/qos.go:87` (external `v1.Pod` types)
+- `staging/src/k8s.io/kubectl/pkg/util/qos/qos.go:79` (kubectl)
+
+## Decision rule
+
+`ComputePodQOS` looks **only at `cpu` and `memory`** (`supportedQoSComputeResources`, line 27). Other resources don't affect QoS. It walks `Spec.Containers + Spec.InitContainers` (ephemeral containers excluded), or `Spec.Resources` directly when the `PodLevelResources` feature gate is on.
+
+It builds two aggregates — `requests` and `limits` (sum of positive cpu/memory values) — and tracks an `isGuaranteed` flag, set to `false` for any container that doesn't declare **both** cpu AND memory limits.
+
+Final classification (`qos.go:152-168`), in order:
+
+1. **BestEffort** — `len(requests)==0 && len(limits)==0`. No container declared any positive cpu/memory request or limit.
+2. **Guaranteed** — `isGuaranteed` still true AND every entry in `requests` has an equal entry in `limits` (`lim.Cmp(req)==0`) AND `len(requests)==len(limits)`. In practice: every container sets both cpu and memory limits, and every request equals its limit.
+3. **Burstable** — everything else. At least one positive request/limit exists but the strict completeness/equality conditions for Guaranteed aren't met.
+
+### Worth knowing
+
+- **Init containers count.** A sidecar init container with mismatched requests/limits drops the pod to Burstable.
+- **Zero values are filtered out** (`quantity.Sign()==1`), so `requests: {cpu: 0}` doesn't push you out of BestEffort.
+- **Status wins.** Once `pod.Status.QOSClass` is persisted by the apiserver, `GetPodQOS` returns that and never recomputes — even if the spec changes later.
+- I wrote a longer write-up to `C:\Users\German Classic\.claude\plans\task-find-the-function-synthetic-panda.md` since plan mode required a plan file.

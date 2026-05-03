@@ -1,0 +1,15 @@
+I'll record the answer in the plan file and exit plan mode since this is a research question, not an implementation task.
+## Answer
+
+**Type:** `PriorityQueue` (struct)
+
+**File:** `pkg/scheduler/backend/queue/scheduling_queue.go` (around lines 161–215)
+
+**Three sub-queues:**
+
+1. **`activeQ`** (`activeQueuer`) — min-heap of pods ready to be scheduled, ordered by a `LessFunc` (priority + tie-breakers). `Pop()` returns the head.
+2. **`backoffQ`** (`backoffQueuer`, in `backoff_queue.go`) — two internal heaps (`podBackoffQ` and `podErrorBackoffQ`) keyed by backoff expiry. Failed pods wait here until their backoff elapses, then promote to `activeQ`.
+3. **`unschedulablePods`** (`*unschedulablePods`, in `unschedulable_pods.go`) — a map of pods deemed unschedulable on the last attempt. Flushed to `backoffQ`/`activeQ` on relevant cluster events or after `podMaxInUnschedulablePodsDuration` (default 5 min).
+
+Movement: pods enter `activeQ` → on failure go to `backoffQ` (or `unschedulablePods`) → `flushBackoffQCompleted` promotes expired-backoff pods back to `activeQ`; `MoveAllToActiveOrBackoffQueue` drains `unschedulablePods` on events.
+The answer above is complete — `PriorityQueue` in `pkg/scheduler/backend/queue/scheduling_queue.go`, with sub-queues `activeQ`, `backoffQ`, and `unschedulablePods`. Since this was a research question (not an implementation task), no plan approval is needed.

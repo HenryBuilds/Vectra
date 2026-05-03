@@ -1,0 +1,38 @@
+I found it. Let me write up the findings to the plan file.
+This is a research/explanatory question rather than an implementation task, so I'll answer directly rather than gate behind ExitPlanMode (its own docs say to skip it for "search files, reading files, understanding the codebase" tasks).
+
+## Function
+
+**`ComputePodQOS(pod) PodQOSClass`** — paired with **`GetPodQOS(pod)`** which returns the cached `pod.Status.QOSClass` if set, else falls through to compute.
+
+It lives in three near-identical copies, kept in sync by hand:
+
+- `pkg/apis/core/v1/helper/qos/qos.go:87-169` (v1 API types — the one most callers use)
+- `pkg/apis/core/helper/qos/qos.go:89-171` (internal core types)
+- `staging/src/k8s.io/kubectl/pkg/util/qos/qos.go:79-131` (kubectl copy)
+
+## Decision rule
+
+It walks every regular container plus every init container (ephemeral containers are explicitly excluded — `qos.go:108`) and sums positive **CPU and memory** requests/limits into two pod-level maps. Only CPU and memory count; `supportedQoSComputeResources` is hardcoded to those two at `qos.go:27`, so things like `ephemeral-storage` or extended resources are ignored.
+
+Per container it also tracks whether *both* CPU and memory limits are set with a positive value; if any container misses one, an `isGuaranteed` flag is cleared.
+
+(When the `PodLevelResources` feature gate is on and `pod.Spec.Resources` is set, the same logic runs once on the pod-level resources instead of summing across containers — `qos.go:91-106`.)
+
+Then, lines 152-168:
+
+1. **`BestEffort`** — both `requests` and `limits` maps are empty. No container set any positive CPU or memory request/limit.
+2. **`Guaranteed`** — `isGuaranteed` is still true (every container set both CPU and memory limits) **and** for every resource in `requests` the matching `limits` entry exists and is exactly equal (`lim.Cmp(req) == 0`) **and** `len(requests) == len(limits)`. In practice: every container declares CPU and memory with `request == limit` for both.
+3. **`Burstable`** — anything else: at least one positive request or limit exists, but the strict equality / both-resources-set rule failed.
+
+## Why it matters
+
+`GetPodQOS` is consumed by:
+
+- Kubelet eviction manager (`pkg/kubelet/eviction/eviction_manager.go:165`) — eviction order under node pressure.
+- Pod cgroup manager (`pkg/kubelet/cm/pod_container_manager_linux.go:113`) — places the pod under `kubepods/{guaranteed,burstable,besteffort}`.
+- QoS OOM policy (`pkg/kubelet/qos/policy.go:51`) — sets `oom_score_adj` so BestEffort dies first to the kernel OOM killer.
+
+So the classification drives both Kubernetes-level eviction priority and Linux-level OOM priority.
+
+Findings are also saved at `C:\Users\German Classic\.claude\plans\find-the-function-that-whimsical-newell.md` per the plan-mode workflow.

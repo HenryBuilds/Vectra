@@ -1,0 +1,1 @@
+Where in the apiserver's eviction subresource is a PodDisruptionBudget actually enforced before allowing a pod to be evicted?

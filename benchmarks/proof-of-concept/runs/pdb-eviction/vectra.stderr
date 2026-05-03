@@ -1,0 +1,10 @@
+project: C:\Users\German Classic\Desktop\kubernetes
+index:   C:\Users\German Classic\Desktop\kubernetes\.vectra\index.db
+model:   (none — symbol-only retrieval)
+retrieval pipeline:
+  [   57 ms] symbol search (FTS5)      (50 items)
+  [    0 ms] RRF fusion                (8 items)
+  [    4 ms] materialize chunks        (8 items)
+context: 8 chunks retrieved [total 62 ms]
+
+--- claude ---

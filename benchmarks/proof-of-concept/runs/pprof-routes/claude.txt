@@ -1,0 +1,30 @@
+I have the answer. Let me write up the findings to the plan file.
+This was a research question, not an implementation task — so per the ExitPlanMode guidance I'll just give you the answer directly. Findings are also saved to the plan file for reference.
+
+## Where `/debug/pprof/` is registered
+
+**Wiring chain:** `--profiling` flag → `FeatureOptions` → `Config.EnableProfiling` → `installAPI()` → `Profiling.Install(NonGoRestfulMux)`
+
+### Call sites
+
+1. **Flag** — `staging/src/k8s.io/apiserver/pkg/server/options/feature.go:54-58`
+   - `--profiling` (bool, default **true**)
+   - `--contention-profiling` (block-profile rate when on)
+   - `--debug-socket-path` (parallel UDS exposure)
+
+2. **Conditional registration** — `staging/src/k8s.io/apiserver/pkg/server/config.go:1124-1125`, inside `installAPI()` (called at `config.go:1120`):
+   ```go
+   if c.EnableProfiling {
+       routes.Profiling{}.Install(s.Handler.NonGoRestfulMux)
+   }
+   ```
+   A separate `UnprotectedDebugSocket.InstallProfiling()` at `config.go:1133` mounts the same handlers on a Unix domain socket when `--debug-socket-path` is set.
+
+3. **Handler** — `staging/src/k8s.io/apiserver/pkg/server/routes/profiling.go:26-36`. `Install` registers via `UnlistedHandleFunc` / `UnlistedHandlePrefix`:
+   - `/debug/pprof`, `/debug/pprof/` (→ `pprof.Index`), `/debug/pprof/profile`, `/debug/pprof/symbol`, `/debug/pprof/trace`
+
+### Where it lives in the routing layer
+
+- Attached to **`s.Handler.NonGoRestfulMux`** — the `*mux.PathRecorderMux` sitting alongside the go-restful container in the apiserver's hybrid mux.
+- Registered as **unlisted**, so they don't show up in the root index but still resolve.
+- Served through the standard apiserver filter chain (authn/authz applies). The `--debug-socket-path` variant deliberately bypasses that chain.

@@ -1,0 +1,16 @@
+Let me verify the key line references before finalizing.
+I have what I need. This is a research question (no code change), so the plan file will simply document the answer.
+**`Proxier.syncProxyRules()`** in `pkg/proxy/iptables/proxier.go:638`. It's the function that emits the full `KUBE-SERVICES` / `KUBE-SVC-*` / `KUBE-SEP-*` / `KUBE-EXT-*` / `KUBE-FW-*` chains and pipes them to `iptables-restore`.
+
+**How it's triggered:**
+
+1. **`BoundedFrequencyRunner`** at `proxier.go:312` —
+   `proxier.syncRunner = runner.NewBoundedFrequencyRunner("sync-runner", proxier.syncProxyRules, minSyncPeriod, syncPeriod, proxyutil.FullSyncPeriod)`. Coalesces requests so syncs fire no more often than `minSyncPeriod`. The loop is started by `SyncLoop()` calling `syncRunner.Loop(wait.NeverStop)`.
+2. **Informer event handlers** — `OnService{Add,Update,Delete}`, `OnEndpointSlice{Add,Update,Delete}`, `OnTopologyChange`, `OnServiceCIDRsChanged`, etc. — all funnel into `proxier.Sync()` → `syncRunner.Run()`.
+3. **`iptables.Monitor` canary** at `proxier.go:314` — a goroutine watches `KUBE-PROXY-CANARY`; if the chain disappears (e.g. `firewalld` flushed the table), it calls `proxier.forceSyncProxyRules` (`proxier.go:627`), which sets `needFullSync = true` and invokes `syncProxyRules()` directly.
+4. **Periodic full re-sync** — `doFullSync` (`proxier.go:651`) becomes true once `FullSyncPeriod` elapses since the last successful full sync (skipped in large-cluster mode).
+5. **Failure recovery** — on a failed sync (`proxier.go:681`) `needFullSync` is set so the next attempt is a full rebuild.
+
+Internally `syncProxyRules` chooses **partial vs full sync** via `doFullSync = needFullSync || (timeSinceLastFullSync > FullSyncPeriod && !largeClusterMode)`. Partial syncs only rewrite chains for Services whose state changed since the last sync.
+
+(Plan mode is active, but this is a research question — per ExitPlanMode's docs it's not appropriate to call here. Plan file with the same notes is saved at `~/.claude/plans/task-in-kube-proxy-iptables-composed-kernighan.md` if useful.)

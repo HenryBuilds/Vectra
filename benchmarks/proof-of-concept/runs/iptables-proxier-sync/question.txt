@@ -1,0 +1,1 @@
+In kube-proxy iptables mode, what function recomputes the full iptables ruleset for Services, and roughly how is it triggered?

@@ -1,0 +1,20 @@
+Quick answer based on exploration of `pkg/proxy/iptables/proxier.go`:
+
+**Function:** `Proxier.syncProxyRules()` at `pkg/proxy/iptables/proxier.go:638` — this is what writes out the full iptables ruleset for every Service/EndpointSlice in one pass.
+
+**Trigger mechanism:** It's not called directly by event handlers. Instead it runs through a `BoundedFrequencyRunner`:
+
+- The runner is constructed at `proxier.go:312`:
+  `NewBoundedFrequencyRunner("sync-runner", proxier.syncProxyRules, minSyncPeriod, syncPeriod, FullSyncPeriod)`
+- It's started in `SyncLoop()` at `proxier.go:443` via `proxier.syncRunner.Loop(wait.NeverStop)`.
+- The wrapper `Proxier.Sync()` (line 426) calls `syncRunner.Run()` to request a sync; the runner coalesces requests so syncs happen no faster than `minSyncPeriod` and at least every `syncPeriod` (with a periodic full resync at `FullSyncPeriod`).
+- Event handlers call `Sync()` after recording a change:
+  - `OnServiceAdd/Update/Delete` (lines 461–477)
+  - `OnEndpointSliceAdd/Update/Delete` (lines 494–514)
+  - `OnTopologyChange` for node label changes (line 535)
+  - Initial syncs from `OnServiceSynced` (489) and `OnEndpointSlicesSynced` (525)
+
+So the flow is: informer event → handler updates change tracker → `Sync()` → `BoundedFrequencyRunner` schedules → `syncProxyRules()` rebuilds and applies the ruleset.
+
+Now I'll write this as the plan file and exit plan mode, since the question was informational and there's nothing to implement.
+The `ExitPlanMode` tool description explicitly says not to use it for research tasks — only for tasks that require writing code. Your question was informational, so the answer above stands and no further action is needed. The plan file at `C:\Users\German Classic\.claude\plans\in-kube-proxy-iptables-mode-lovely-book.md` captures the answer for reference.

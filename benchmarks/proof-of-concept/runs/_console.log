@@ -54,3 +54,57 @@ POC harness — kubernetes clone at c:/Users/German Classic/Desktop/kubernetes
   · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/leader-election/  (vectra 135.00s, claude 148.99s)
 
 All tasks complete. Outputs in /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs
+POC harness — kubernetes clone at c:/Users/German Classic/Desktop/kubernetes
+
+
+=== [scheduler-priority] In the kube-scheduler, where is a Pod's priority used to decide which existing pods to preempt when there is no room? Name the function and the file.
+  · vectra ask …  (cached, 44.56s)
+  · claude -p …  (cached, 191.88s)
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/scheduler-priority/  (vectra 44.56s, claude 191.88s)
+
+=== [kubelet-eviction] How does the kubelet decide which pods to evict under memory pressure? Walk me through the ranking logic and name the relevant types and functions.
+  · vectra ask …  (cached, 177.58s)
+  · claude -p …  (cached, 189.30s)
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/kubelet-eviction/  (vectra 177.58s, claude 189.30s)
+
+=== [admission-flow] When a CREATE Pod request hits the API server, in what order do mutating and validating admission plugins run, and where is that ordering enforced in code?
+  · vectra ask …  (cached, 237.99s)
+  · claude -p …  (cached, 174.88s)
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/admission-flow/  (vectra 237.99s, claude 174.88s)
+
+=== [leader-election] How does kube-controller-manager's leader election work, and where is the lease-renewal interval configured?
+  · vectra ask …  (cached, 135.00s)
+  · claude -p …  (cached, 148.99s)
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/leader-election/  (vectra 135.00s, claude 148.99s)
+
+=== [apiserver-watch-cache] How does the apiserver's watch cache reduce etcd load? Name the central type that implements it and the file it lives in.
+  · vectra ask …
+  · claude -p …
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/apiserver-watch-cache/  (vectra 104.54s, claude 98.19s)
+
+=== [iptables-proxier-sync] In kube-proxy iptables mode, what function recomputes the full iptables ruleset for Services, and roughly how is it triggered?
+  · vectra ask …
+  · claude -p …
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/iptables-proxier-sync/  (vectra 89.93s, claude 80.09s)
+
+=== [pdb-eviction] Where in the apiserver's eviction subresource is a PodDisruptionBudget actually enforced before allowing a pod to be evicted?
+  · vectra ask …
+  · claude -p …
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/pdb-eviction/  (vectra 123.60s, claude 253.65s)
+
+=== [pod-qos-class] Find the function that classifies a Pod into a QoS class (Guaranteed / Burstable / BestEffort) and explain its decision rule.
+  · vectra ask …
+  · claude -p …
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/pod-qos-class/  (vectra 73.78s, claude 90.69s)
+
+=== [pprof-routes] Where in the apiserver's HTTP routing layer are the /debug/pprof/ endpoints registered?
+  · vectra ask …
+  · claude -p …
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/pprof-routes/  (vectra 55.16s, claude 101.41s)
+
+=== [scheduler-queue] How does the scheduler's PriorityQueue order pods waiting to be scheduled? Name the type, the file it lives in, and the sub-queues it maintains.
+  · vectra ask …
+  · claude -p …
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/scheduler-queue/  (vectra 106.88s, claude 70.60s)
+
+All tasks complete. Outputs in /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs
