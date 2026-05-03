@@ -146,3 +146,61 @@ jobs:
             --output-on-failure \
             --no-tests=ignore \
             ${{ matrix.ctest_config && format('-C {0}', matrix.ctest_config) || '' }}
+
+  # ---------------------------------------------------------------------------
+  # CUDA compile-only build. GitHub-hosted runners do not ship with a
+  # GPU, so we cannot run the resulting binary — but we can prove the
+  # CUDA path keeps compiling. This catches the most common GPU-build
+  # regression class: an upstream llama.cpp / ggml-cuda change that
+  # breaks our preset, an arch-list typo, or a CUDA-toolkit-version
+  # gating bug. Only Linux + GCC + nvcc here; Windows-CUDA on hosted
+  # runners is too brittle to be worth the wall-clock minutes.
+  # ---------------------------------------------------------------------------
+  build-cuda-compile-only:
+    name: Linux · GCC · CUDA · compile-only
+    needs: format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CUDA Toolkit
+        # Pin a major.minor we know works with our 120a-real arch
+        # (Blackwell needs ≥ 12.8). Bump in lockstep with the multi-
+        # arch list in CMakePresets._gpu-cuda-multiarch.
+        uses: Jimver/cuda-toolkit@v0.2.21
+        with:
+          cuda: '12.8.0'
+          linux-local-args: '["--toolkit"]'
+          method: 'network'
+
+      - name: Cache vcpkg-installed packages
+        uses: actions/cache@v4
+        with:
+          path: build/linux-gcc-cuda-release/vcpkg_installed
+          key: vcpkg-${{ runner.os }}-cuda-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-cuda-
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            curl zip unzip tar \
+            autoconf automake autoconf-archive \
+            linux-libc-dev
+
+      - name: Set VCPKG_ROOT
+        run: echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> $GITHUB_ENV
+
+      - name: Configure (CUDA multi-arch)
+        run: cmake --preset linux-gcc-cuda-release
+
+      - name: Build (compile only — no GPU on the runner)
+        run: cmake --build --preset linux-gcc-cuda-release
