@@ -73,6 +73,16 @@
         "command": "vectra.resetIndex",
         "title": "Vectra: Reset & rebuild index",
         "category": "Vectra"
+      },
+      {
+        "command": "vectra.doctor",
+        "title": "Vectra: Doctor (health check)",
+        "category": "Vectra"
+      },
+      {
+        "command": "vectra.welcome",
+        "title": "Vectra: Welcome (re-open walkthrough)",
+        "category": "Vectra"
       }
     ],
     "menus": {
@@ -205,7 +215,73 @@
           "markdownDescription": "Cross-encoder reranker passed to `vectra ask`. Optional; reranking applies only to retrieval, the index itself is unaffected — flipping this on/off does not require a re-index."
         }
       }
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "vectra.welcome",
+        "title": "Get started with Vectra",
+        "description": "Local-first code RAG that dispatches to Claude Code. No cloud, no telemetry, single binary.",
+        "steps": [
+          {
+            "id": "binary",
+            "title": "Install the vectra CLI",
+            "description": "Vectra needs the `vectra` binary on PATH. Build from source ([github.com/HenryBuilds/Vectra](https://github.com/HenryBuilds/Vectra)) or download a release asset, then point `vectra.binary` at it if it isn't on PATH.\n[Open Settings](command:workbench.action.openSettings?%22vectra.binary%22)",
+            "media": {
+              "markdown": "media/walkthrough-binary.md"
+            },
+            "completionEvents": [
+              "onSettingChanged:vectra.binary",
+              "onCommand:vectra.doctor"
+            ]
+          },
+          {
+            "id": "claude",
+            "title": "Install Claude Code",
+            "description": "Vectra delegates editing to `claude -p`. Install the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/quickstart) (`npm i -g @anthropic-ai/claude-code`) and sign in with your Anthropic account.",
+            "media": {
+              "markdown": "media/walkthrough-claude.md"
+            },
+            "completionEvents": [
+              "onCommand:vectra.doctor"
+            ]
+          },
+          {
+            "id": "index",
+            "title": "Index your workspace",
+            "description": "Build the local index so Vectra can retrieve over your code.\n[Index workspace](command:vectra.index)\n[Pick an embedding model](command:vectra.reindexWithModel)",
+            "media": {
+              "markdown": "media/walkthrough-index.md"
+            },
+            "completionEvents": [
+              "onCommand:vectra.index",
+              "onCommand:vectra.reindexWithModel"
+            ]
+          },
+          {
+            "id": "chat",
+            "title": "Open the chat",
+            "description": "Ask questions and let Claude Code edit. The chat panel opens beside your editor.\n[Open Vectra chat](command:vectra.openChat)",
+            "media": {
+              "markdown": "media/walkthrough-chat.md"
+            },
+            "completionEvents": [
+              "onCommand:vectra.openChat"
+            ]
+          },
+          {
+            "id": "doctor",
+            "title": "Verify the setup",
+            "description": "Run a one-shot health check against the binaries, the index file, the GPU backend, and the permission bridge.\n[Run Vectra: Doctor](command:vectra.doctor)",
+            "media": {
+              "markdown": "media/walkthrough-doctor.md"
+            },
+            "completionEvents": [
+              "onCommand:vectra.doctor"
+            ]
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run check-version && npm run sync-license && npm run compile",

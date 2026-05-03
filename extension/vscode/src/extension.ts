@@ -13,6 +13,7 @@
 // CLI, owns the file-modification side. We just route input/output.
 
 import * as cp from 'child_process';
+import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { AllowList } from './allowList';
@@ -220,6 +221,125 @@ function buildIndexArgs(): string[] {
         args.push('--model', indexModel);
     }
     return args;
+}
+
+// Run `cmd args…` once with a short timeout, capture stdout +
+// exit code. Used by the doctor command to probe binaries quickly
+// without holding up the user. Returns null when the spawn itself
+// failed (binary not on PATH, EACCES, …).
+function runOneShot(
+    cmd: string,
+    args: readonly string[],
+    timeoutMs: number,
+): Promise<{ exitCode: number; stdout: string; stderr: string } | null> {
+    return new Promise((resolve) => {
+        let proc: cp.ChildProcess;
+        try {
+            proc = cp.spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        } catch {
+            resolve(null);
+            return;
+        }
+        let stdout = '';
+        let stderr = '';
+        const timer = setTimeout(() => {
+            try {
+                proc.kill();
+            } catch {
+                // best-effort
+            }
+        }, timeoutMs);
+        proc.stdout?.on('data', (d: Buffer) => (stdout += d.toString('utf8')));
+        proc.stderr?.on('data', (d: Buffer) => (stderr += d.toString('utf8')));
+        proc.on('error', () => {
+            clearTimeout(timer);
+            resolve(null);
+        });
+        proc.on('close', (code) => {
+            clearTimeout(timer);
+            resolve({ exitCode: code ?? 0, stdout, stderr });
+        });
+    });
+}
+
+// First-line summary of a binary's --version output. Strips ANSI,
+// collapses whitespace, caps length so a multi-line banner shows up
+// as a single readable check line.
+function firstLine(s: string, max = 100): string {
+    const cleaned = s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim();
+    const line = cleaned.split('\n', 1)[0]?.trim() ?? '';
+    return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
+// Health check. Probes every external dependency the chat panel
+// needs and writes a checklist into the output channel. Surfaced
+// from the walkthrough's last step; also runnable manually from
+// the command palette as "Vectra: Doctor".
+async function commandDoctor(
+    output: vscode.OutputChannel,
+    bridge: PermissionBridge,
+): Promise<void> {
+    output.show(true);
+    output.appendLine('');
+    output.appendLine('--- Vectra: doctor ---');
+
+    const cwd = workspaceRoot();
+    output.appendLine(`workspace        : ${cwd ?? '(no folder open)'}`);
+
+    const { binary } = readSettings();
+    const vectraResult = await runOneShot(binary, ['--version'], 5000);
+    if (vectraResult === null) {
+        output.appendLine(
+            `vectra binary    : '${binary}' — NOT FOUND. Install the CLI or set 'vectra.binary'.`,
+        );
+    } else if (vectraResult.exitCode !== 0) {
+        output.appendLine(
+            `vectra binary    : '${binary}' — exited ${vectraResult.exitCode}: ${firstLine(vectraResult.stderr || vectraResult.stdout)}`,
+        );
+    } else {
+        output.appendLine(`vectra binary    : ${binary} → ${firstLine(vectraResult.stdout)}`);
+        // Some vectra builds print "GPU backend  : CUDA" in
+        // --version output; surface as a separate line if present
+        // so the user can see whether GPU acceleration is wired.
+        const gpuMatch = vectraResult.stdout.match(/GPU backend\s*:\s*(\w+)/i);
+        if (gpuMatch) {
+            output.appendLine(`gpu backend      : ${gpuMatch[1]}`);
+        }
+    }
+
+    const claudeResult = await runOneShot('claude', ['--version'], 5000);
+    if (claudeResult === null) {
+        output.appendLine(
+            `claude binary    : 'claude' — NOT FOUND. Install with 'npm i -g @anthropic-ai/claude-code'.`,
+        );
+    } else {
+        output.appendLine(`claude binary    : claude → ${firstLine(claudeResult.stdout || claudeResult.stderr)}`);
+    }
+
+    if (cwd) {
+        const indexUri = vscode.Uri.joinPath(vscode.Uri.file(cwd), '.vectra', 'index.db');
+        try {
+            const stat = await vscode.workspace.fs.stat(indexUri);
+            const mb = (stat.size / (1024 * 1024)).toFixed(1);
+            output.appendLine(`index            : ${path.join('.vectra', 'index.db')} (${mb} MB)`);
+        } catch {
+            output.appendLine(
+                `index            : (none) — run "Vectra: Index workspace" or "Vectra: Re-index with model…"`,
+            );
+        }
+    }
+
+    const cfg = vscode.workspace.getConfiguration('vectra');
+    const indexModel = cfg.get<string>('indexModel', '').trim();
+    output.appendLine(`embedding model  : ${indexModel || '(symbol-only)'}`);
+    const reranker = cfg.get<string>('reranker', '').trim();
+    output.appendLine(`reranker         : ${reranker || '(off)'}`);
+
+    output.appendLine(
+        `permission bridge: ${bridge.isReady ? bridge.url + ' (ready)' : '(NOT READY — reload the window)'}`,
+    );
+
+    output.appendLine('--- end ---');
 }
 
 // Recovery path for a corrupt .vectra/index.db. Asks for explicit
@@ -446,6 +566,14 @@ export function activate(context: vscode.ExtensionContext): void {
             commandReindexWithModel(output),
         ),
         vscode.commands.registerCommand('vectra.resetIndex', () => commandResetIndex(output)),
+        vscode.commands.registerCommand('vectra.doctor', () => commandDoctor(output, bridge)),
+        vscode.commands.registerCommand('vectra.welcome', () =>
+            vscode.commands.executeCommand(
+                'workbench.action.openWalkthrough',
+                { category: `${context.extension.id}#vectra.welcome` },
+                false,
+            ),
+        ),
         vscode.commands.registerCommand('vectra.newChat', () => VectraChatPanel.newChat()),
         vscode.commands.registerCommand('vectra.showHistory', () =>
             VectraChatPanel.showHistory(),
@@ -468,6 +596,43 @@ export function activate(context: vscode.ExtensionContext): void {
         const autoIndexer = new AutoIndexer(cwd, output, () => readSettings().binary);
         context.subscriptions.push(autoIndexer);
     }
+
+    // First-run: open the walkthrough exactly once per global state.
+    // Triggered when there is no .vectra/ in the active workspace
+    // AND we haven't shown the walkthrough before. The fresh-install
+    // case where the user hasn't opened any folder also passes (cwd
+    // is undefined) so they still see the welcome.
+    void maybeShowWelcome(context);
+}
+
+const WELCOME_SHOWN_KEY = 'vectra.welcomeShown.v1';
+
+async function maybeShowWelcome(context: vscode.ExtensionContext): Promise<void> {
+    if (context.globalState.get<boolean>(WELCOME_SHOWN_KEY) === true) {
+        return;
+    }
+    // Mark as shown *before* invoking the command so a slow
+    // walkthrough open does not re-trigger on a fast reload.
+    await context.globalState.update(WELCOME_SHOWN_KEY, true);
+
+    const cwd = workspaceRoot();
+    if (cwd) {
+        const indexUri = vscode.Uri.joinPath(vscode.Uri.file(cwd), '.vectra', 'index.db');
+        try {
+            await vscode.workspace.fs.stat(indexUri);
+            // The user already has an index — they have done this
+            // dance before, no need to interrupt.
+            return;
+        } catch {
+            // No index yet; fall through to the welcome.
+        }
+    }
+
+    void vscode.commands.executeCommand(
+        'workbench.action.openWalkthrough',
+        { category: `${context.extension.id}#vectra.welcome` },
+        false,
+    );
 }
 
 // Surface the persisted always-allow entries for the active workspace
