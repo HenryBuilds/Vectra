@@ -46,6 +46,12 @@ option(VECTRA_GPU_CUDA            "Enable CUDA backend in llama.cpp"  OFF)
 option(VECTRA_GPU_METAL           "Enable Metal backend in llama.cpp" OFF)
 option(VECTRA_GPU_VULKAN          "Enable Vulkan backend in llama.cpp" OFF)
 option(VECTRA_GPU_HIP             "Enable HIP/ROCm backend in llama.cpp" OFF)
+# When ON (the default), Vectra probes for an available GPU
+# toolkit at configure time and turns the matching backend on.
+# Set to OFF to force a CPU-only build, or pre-set one of the
+# VECTRA_GPU_* options above to force a specific backend
+# regardless of what is detected.
+option(VECTRA_AUTO_GPU            "Auto-detect a GPU backend when none is set" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -261,6 +267,60 @@ if(VECTRA_BUILD_EMBED)
     set(LLAMA_BUILD_TOOLS    OFF CACHE BOOL "" FORCE)
     set(LLAMA_BUILD_COMMON   OFF CACHE BOOL "" FORCE)
 
+    # ----- GPU backend auto-detect ---------------------------------
+    # When VECTRA_AUTO_GPU is on (default) AND the user has not
+    # forced any specific backend, probe for the toolkits at
+    # configure time and turn the matching VECTRA_GPU_* on. Order
+    # is platform-conditional and reflects "fastest viable for that
+    # OS":
+    #   macOS  → Metal (always available; Apple Silicon + Intel)
+    #   else   → CUDA (NVIDIA) > HIP (AMD ROCm) > Vulkan (cross)
+    # An explicit -DVECTRA_GPU_X=ON skips the probe entirely and
+    # an explicit -DVECTRA_AUTO_GPU=OFF forces a CPU-only build
+    # even if a toolkit is installed.
+    set(_vectra_gpu_explicit OFF)
+    foreach(_b VECTRA_GPU_CUDA VECTRA_GPU_METAL VECTRA_GPU_VULKAN VECTRA_GPU_HIP)
+        if(${_b})
+            set(_vectra_gpu_explicit ON)
+        endif()
+    endforeach()
+
+    if(VECTRA_AUTO_GPU AND NOT _vectra_gpu_explicit)
+        if(APPLE)
+            message(STATUS "vectra: auto-detected Apple platform — enabling Metal backend")
+            set(VECTRA_GPU_METAL ON CACHE BOOL "" FORCE)
+        else()
+            find_package(CUDAToolkit QUIET)
+            if(CUDAToolkit_FOUND)
+                message(STATUS
+                    "vectra: auto-detected CUDA Toolkit ${CUDAToolkit_VERSION} — enabling CUDA backend")
+                set(VECTRA_GPU_CUDA ON CACHE BOOL "" FORCE)
+            else()
+                # ROCm ships its own CMake config under hip-config.cmake;
+                # find_package(hip CONFIG) is the canonical probe.
+                find_package(hip QUIET CONFIG)
+                if(hip_FOUND)
+                    message(STATUS
+                        "vectra: auto-detected ROCm/HIP — enabling HIP backend")
+                    set(VECTRA_GPU_HIP ON CACHE BOOL "" FORCE)
+                else()
+                    find_package(Vulkan QUIET)
+                    if(Vulkan_FOUND)
+                        message(STATUS
+                            "vectra: auto-detected Vulkan SDK ${Vulkan_VERSION} — enabling Vulkan backend")
+                        set(VECTRA_GPU_VULKAN ON CACHE BOOL "" FORCE)
+                    else()
+                        message(STATUS
+                            "vectra: no GPU toolkit detected — building CPU-only "
+                            "(set -DVECTRA_GPU_<backend>=ON to override or install CUDA / ROCm / Vulkan SDK)")
+                    endif()
+                endif()
+            endif()
+        endif()
+    elseif(NOT VECTRA_AUTO_GPU AND NOT _vectra_gpu_explicit)
+        message(STATUS "vectra: VECTRA_AUTO_GPU=OFF and no backend pinned — CPU-only build")
+    endif()
+
     if(VECTRA_GPU_CUDA)
         set(GGML_CUDA   ON CACHE BOOL "" FORCE)
     endif()
@@ -341,6 +401,23 @@ endif()
 # ---------------------------------------------------------------------------
 # Status banner
 # ---------------------------------------------------------------------------
+# Compose a single-word GPU label so the user sees at a glance which
+# backend will be linked into the embedder. "cpu-only" makes it
+# explicit when no GPU toolkit was found / enabled — that is the
+# most common foot-gun and surfacing it here saves a follow-up
+# question when embedding feels slow.
+if(VECTRA_GPU_CUDA)
+    set(_vectra_gpu_label "CUDA")
+elseif(VECTRA_GPU_METAL)
+    set(_vectra_gpu_label "Metal")
+elseif(VECTRA_GPU_HIP)
+    set(_vectra_gpu_label "HIP/ROCm")
+elseif(VECTRA_GPU_VULKAN)
+    set(_vectra_gpu_label "Vulkan")
+else()
+    set(_vectra_gpu_label "cpu-only")
+endif()
+
 message(STATUS "")
 message(STATUS "Vectra ${PROJECT_VERSION}")
 message(STATUS "  Build type   : ${CMAKE_BUILD_TYPE}")
@@ -349,5 +426,6 @@ message(STATUS "  Compiler     : ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_V
 message(STATUS "  Tests        : ${VECTRA_BUILD_TESTS}")
 message(STATUS "  Benchmarks   : ${VECTRA_BUILD_BENCHMARKS}")
 message(STATUS "  Embed        : ${VECTRA_BUILD_EMBED}")
+message(STATUS "  GPU backend  : ${_vectra_gpu_label}")
 message(STATUS "  Sanitizers   : ASAN=${VECTRA_ENABLE_ASAN} TSAN=${VECTRA_ENABLE_TSAN} UBSAN=${VECTRA_ENABLE_UBSAN}")
 message(STATUS "")

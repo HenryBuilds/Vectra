@@ -64,6 +64,66 @@ ctest --preset release
 | `windows-msvc-release` / `windows-clang-release` | Windows with MSVC or clang-cl |
 | `asan` / `tsan` | Sanitizer builds (Unix only) |
 
+### GPU acceleration
+
+Vectra builds the embedding model through llama.cpp / ggml, which
+ships backends for CUDA, Metal, HIP/ROCm, and Vulkan. **Vectra
+auto-detects the right one at configure time** — you usually do
+not need a flag.
+
+The probe runs once per fresh configure (`build/<preset>/CMakeCache.txt`
+remembers the choice afterwards) and follows this order:
+
+| Platform | First match wins |
+|----------|------------------|
+| **macOS** (Apple Silicon + Intel) | Metal |
+| **Linux / Windows** | CUDA Toolkit → ROCm/HIP → Vulkan SDK → CPU |
+
+Watch the configure output for the resolved choice:
+
+```
+-- vectra: auto-detected CUDA Toolkit 12.8 — enabling CUDA backend
+-- ...
+-- Vectra 0.0.1
+--   GPU backend  : CUDA
+```
+
+**Overrides** (any time you want something other than auto):
+
+```bash
+# Force a specific backend (skips probe):
+cmake --preset release -DVECTRA_GPU_CUDA=ON
+cmake --preset release -DVECTRA_GPU_METAL=ON
+cmake --preset release -DVECTRA_GPU_VULKAN=ON
+cmake --preset release -DVECTRA_GPU_HIP=ON
+
+# Force CPU-only even on a GPU machine:
+cmake --preset release -DVECTRA_AUTO_GPU=OFF
+
+# Pick CUDA on a machine that also has Vulkan / ROCm installed
+# (CUDA already wins by probe order; this just makes it explicit):
+cmake --preset release -DVECTRA_GPU_CUDA=ON
+```
+
+**CUDA notes.** CUDA architecture selection is delegated to llama.cpp's
+ggml-cuda CMakeLists, which auto-targets the host GPU when
+`GGML_NATIVE=ON` (the default for native builds). For redistributable
+binaries, override with a multi-arch list, e.g.:
+
+```bash
+cmake --preset release -DVECTRA_GPU_CUDA=ON \
+    -DCMAKE_CUDA_ARCHITECTURES="75-virtual;86-real;89-real;120a-real"
+```
+
+This covers Turing → Blackwell with one binary. CUDA Toolkit 12.8+ is
+required for Blackwell (RTX 50-series) FP4 tensor cores; older
+toolkits skip the `120a-real` arch automatically.
+
+**Skipping the embedder.** If you only work on the CLI / store / core
+modules and don't want a 10–15-minute first build, pass
+`-DVECTRA_BUILD_EMBED=OFF`. Vectra falls back to symbol-only retrieval
+(FTS5 + tree-sitter), which works without any GPU or embedding model.
+
 ## Repository layout
 
 ```
