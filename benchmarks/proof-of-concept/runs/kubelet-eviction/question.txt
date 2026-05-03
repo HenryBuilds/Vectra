@@ -1,0 +1,1 @@
+How does the kubelet decide which pods to evict under memory pressure? Walk me through the ranking logic and name the relevant types and functions.

@@ -1,0 +1,22 @@
+{
+  "_comment": "Proof-of-concept tasks for the Vectra-vs-Claude-plain anecdote run. Each task is a question a real engineer would ask about an unfamiliar large codebase. Pick questions where (a) the answer is concrete (a function/file/line range, not 'discuss'), (b) Claude's training has plausibly seen kubernetes but the version drifts, and (c) the answer requires understanding more than one file.",
+  "repo": "kubernetes/kubernetes",
+  "tasks": [
+    {
+      "id": "scheduler-priority",
+      "question": "In the kube-scheduler, where is a Pod's priority used to decide which existing pods to preempt when there is no room? Name the function and the file."
+    },
+    {
+      "id": "kubelet-eviction",
+      "question": "How does the kubelet decide which pods to evict under memory pressure? Walk me through the ranking logic and name the relevant types and functions."
+    },
+    {
+      "id": "admission-flow",
+      "question": "When a CREATE Pod request hits the API server, in what order do mutating and validating admission plugins run, and where is that ordering enforced in code?"
+    },
+    {
+      "id": "leader-election",
+      "question": "How does kube-controller-manager's leader election work, and where is the lease-renewal interval configured?"
+    }
+  ]
+}

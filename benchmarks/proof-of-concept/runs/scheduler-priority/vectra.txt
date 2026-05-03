@@ -1,0 +1,14 @@
+**Function:** `SelectVictimsOnNode`
+
+**File:** `pkg/scheduler/framework/plugins/defaultpreemption/default_preemption.go`
+
+The pod-priority comparison happens inside the helper `isPreemptionAllowed` that `SelectVictimsOnNode` uses to filter candidates:
+
+```go
+return corev1helpers.PodPriority(victim.GetPod()) < corev1helpers.PodPriority(preemptor) && pl.IsEligiblePod(nodeInfo, victim, preemptor)
+```
+
+`SelectVictimsOnNode` removes all lower-priority eligible pods from the node, checks whether the preemptor now fits, and then greedily adds victims back in descending priority order — keeping the minimum set whose removal still allows the preemptor to schedule.
+
+Since this is a read-only Q&A (no code changes needed), there is nothing to plan or implement.
+The answer is provided above — `SelectVictimsOnNode` in `pkg/scheduler/framework/plugins/defaultpreemption/default_preemption.go`. No further action needed since this was a research question.

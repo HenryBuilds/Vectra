@@ -1,0 +1,56 @@
+POC harness — kubernetes clone at c:/Users/German Classic/Desktop/kubernetes
+
+
+=== [scheduler-priority] In the kube-scheduler, where is a Pod's priority used to decide which existing pods to preempt when there is no room? Name the function and the file.
+  · vectra ask …
+  · claude -p …
+[eval]:15
+                return;
+                ^^^^^^
+Return statement is not allowed here
+
+SyntaxError: Illegal return statement
+    at makeContextifyScript (node:internal/vm:185:14)
+    at compileScript (node:internal/process/execution:383:10)
+    at evalTypeScript (node:internal/process/execution:256:22)
+    at node:internal/main/eval_string:74:3
+
+Node.js v22.19.0
+POC harness — kubernetes clone at c:/Users/German Classic/Desktop/kubernetes
+
+
+=== [scheduler-priority] In the kube-scheduler, where is a Pod's priority used to decide which existing pods to preempt when there is no room? Name the function and the file.
+  · vectra ask …  (cached, 44.56s)
+  · claude -p …  (cached, 191.88s)
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/scheduler-priority/  (vectra 44.56s, claude 191.88s)
+
+=== [kubelet-eviction] How does the kubelet decide which pods to evict under memory pressure? Walk me through the ranking logic and name the relevant types and functions.
+  · vectra ask …
+  · claude -p …
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/kubelet-eviction/  (vectra 177.58s, claude 189.30s)
+
+All tasks complete. Outputs in /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs
+POC harness — kubernetes clone at c:/Users/German Classic/Desktop/kubernetes
+
+
+=== [scheduler-priority] In the kube-scheduler, where is a Pod's priority used to decide which existing pods to preempt when there is no room? Name the function and the file.
+  · vectra ask …  (cached, 44.56s)
+  · claude -p …  (cached, 191.88s)
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/scheduler-priority/  (vectra 44.56s, claude 191.88s)
+
+=== [kubelet-eviction] How does the kubelet decide which pods to evict under memory pressure? Walk me through the ranking logic and name the relevant types and functions.
+  · vectra ask …  (cached, 177.58s)
+  · claude -p …  (cached, 189.30s)
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/kubelet-eviction/  (vectra 177.58s, claude 189.30s)
+
+=== [admission-flow] When a CREATE Pod request hits the API server, in what order do mutating and validating admission plugins run, and where is that ordering enforced in code?
+  · vectra ask …
+  · claude -p …
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/admission-flow/  (vectra 237.99s, claude 174.88s)
+
+=== [leader-election] How does kube-controller-manager's leader election work, and where is the lease-renewal interval configured?
+  · vectra ask …
+  · claude -p …
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs/leader-election/  (vectra 135.00s, claude 148.99s)
+
+All tasks complete. Outputs in /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs

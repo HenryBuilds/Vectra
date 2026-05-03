@@ -1,0 +1,26 @@
+I'll research the kubelet eviction logic in this repo, then write up the explanation as a plan file.
+Let me verify the key code citations before writing this up.
+The Explore findings line up with what I just verified. This task is explanatory rather than an implementation, so I'll capture the walkthrough as the plan-file deliverable.
+The walkthrough is in `C:\Users\German Classic\.claude\plans\task-how-does-the-vivid-shannon.md`. Short version:
+
+**The policy lives in one line** — `pkg/kubelet/eviction/helpers.go:819`:
+
+```go
+func rankMemoryPressure(pods []*v1.Pod, stats statsFunc) {
+    orderedBy(exceedMemoryRequests(stats), priority, memory(stats)).Sort(pods)
+}
+```
+
+**Three comparators, applied in order** (top wins; lower-down only used as tiebreakers):
+
+1. `exceedMemoryRequests(stats)` (`helpers.go:693`) — pods over their memory request sort first. Pods with missing stats are also pushed to the front.
+2. `priority` (`helpers.go:680`) — lower `Pod.Spec.Priority` sorts first.
+3. `memory(stats)` (`helpers.go:712`) — final tiebreak by `usage − request`, larger over-consumer first.
+
+These are composed via `orderedBy(...)` → `multiSorter` (`helpers.go:629–677`); `Less` walks the comparators and returns on the first non-zero result.
+
+**How it gets called** — `(*managerImpl).synchronize` (`eviction_manager.go:248`) gathers stats, evaluates `Threshold`s, picks the highest-priority unmet one via `byEvictionPriority` (`helpers.go:836`), tries `reclaimNodeLevelResources` first, then looks up the ranker in `m.signalToRankFunc` (built by `buildSignalToRankFunc` at `helpers.go:1150`, mapping `SignalMemoryAvailable` and `SignalAllocatableMemoryAvailable` → `rankMemoryPressure`), sorts active pods, and kills exactly one (`eviction_manager.go:421–443` → `evictPod` at line 611 → `killPodFunc`). Hard thresholds get a 0-second grace period; soft thresholds get `MaxPodGracePeriodSeconds` clamped against the pod's own `TerminationGracePeriodSeconds`.
+
+**Key types**: `Manager`/`managerImpl`, `Threshold`, `Signal`, `rankFunc`, `statsFunc`, `cmpFunc`, `multiSorter`, `byEvictionPriority` — locations in the table at the bottom of the plan file.
+
+Since this was an explanatory/research task rather than an implementation, I'm not calling `ExitPlanMode` (its own guidance says to skip it for research). Let me know if you want me to drill into any piece — e.g. how `statsFunc` resolves per-container memory, or how soft-threshold grace-period bookkeeping works in `nodeConditionsObservedAt` / `thresholdsObservedAt`.

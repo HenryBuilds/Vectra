@@ -1,0 +1,17 @@
+I'll research these four kube questions in parallel using Explore agents, then write the findings to the plan file.
+Good — this is the upstream Kubernetes source tree. Launching three Explore agents in parallel for the four questions.
+Let me spot-check the most load-bearing citations before writing the plan.
+All four citations verified. Writing the findings to the plan file.
+Since this is a research task (not an implementation), I won't call ExitPlanMode — its docs explicitly say not to use it for "gathering information, searching files, reading files or in general trying to understand the codebase." The full answers (with verified file:line citations) are written to:
+
+`C:\Users\German Classic\.claude\plans\in-the-kube-scheduler-where-humble-puppy.md`
+
+Quick summary of each:
+
+**1. Scheduler preemption by priority** — `DefaultPreemption.SelectVictimsOnNode` at `pkg/scheduler/framework/plugins/defaultpreemption/default_preemption.go:251`. The priority comparison itself is in `isPreemptionAllowed` at line 395 of the same file (uses `corev1helpers.PodPriority`). Cross-node tiebreak: `pickOneNodeForPreemption` at `pkg/scheduler/framework/preemption/preemption.go:311`.
+
+**2. Kubelet memory-pressure ranking** — `rankMemoryPressure` at `pkg/kubelet/eviction/helpers.go:819` does `orderedBy(exceedMemoryRequests, priority, memory).Sort(pods)` — three tiers: (1) over-request first, (2) lower priority first, (3) larger absolute usage above requests. Driven from `managerImpl.synchronize` (`pkg/kubelet/eviction/eviction_manager.go:248`), which dispatches via `signalToRankFunc` built in `buildSignalToRankFunc` (`helpers.go:1151`).
+
+**3. Admission ordering** — Mutating runs before validating. The chain iterates plugins in slice order in `chainAdmissionHandler.{Admit,Validate}` at `staging/src/k8s.io/apiserver/pkg/admission/chain.go:31` and `:47`. The slice order is the constant `AllOrderedPlugins` in `pkg/kubeapiserver/options/plugins.go:74`. Mutating-then-validating is enforced by the create handler at `staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:203` (mutate) followed by the validate callback in `staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:233`.
+
+**4. controller-manager leader election** — Wired in `cmd/kube-controller-manager/app/controllermanager.go:856` (`leaderElectAndRun` → `leaderelection.RunOrDie`). The renewal interval is `RenewDeadline` (default **10s**), retried every `RetryPeriod` (default **2s**), with `LeaseDuration` (**15s**) as the takeover threshold. Defaults: `staging/src/k8s.io/component-base/config/v1alpha1/defaults.go:35`. Struct: `staging/src/k8s.io/component-base/config/types.go:41`. Renewal loop: `LeaderElector.renew` at `staging/src/k8s.io/client-go/tools/leaderelection/leaderelection.go:279` (uses `PollUntilContextTimeout` with `RetryPeriod` as interval, `RenewDeadline` as timeout).

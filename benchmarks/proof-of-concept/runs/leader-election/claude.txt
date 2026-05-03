@@ -1,0 +1,26 @@
+I'll research how kube-controller-manager's leader election works in this codebase. Since this is an informational question, the "plan" will document the findings rather than propose changes.
+Let me verify the key sites by reading the actual code.
+I have everything I need. Let me write the findings to the plan file.
+This is a research question, not an implementation task, so I'll answer directly rather than request plan approval (per `ExitPlanMode`'s own guidance: "do NOT use it" for research tasks). Full write-up is in the plan file at `~/.claude/plans/how-does-kube-controller-manager-s-leade-jazzy-lemur.md`.
+
+## Short answer
+
+**How it works.** KCM uses the generic `client-go/tools/leaderelection` library and holds a `Lease` object (`kube-system/kube-controller-manager`).
+
+1. `cmd/kube-controller-manager/app/controllermanager.go:301` — gates on `LeaderElection.LeaderElect`.
+2. `controllermanager.go:397` — spawns `leaderElectAndRun` for the **main lock** with `OnStartedLeading` (starts every controller via `run(ctx, controllerDescriptors)`) and `OnStoppedLeading` (logs and `klog.FlushAndExit` — KCM hard-exits when it loses the lease, unless the `ControllerManagerReleaseLeaderElectionLockOnExit` feature gate is on).
+3. `controllermanager.go:422–453` — when **Leader Migration** is enabled, a *second* lock is acquired (after the main one is held) for the subset of controllers being migrated to/from cloud-controller-manager.
+4. `controllermanager.go:838 leaderElectAndRun` — builds the `resourcelock` and calls `leaderelection.RunOrDie(...)` (line 856) with `LeaseDuration` / `RenewDeadline` / `RetryPeriod` plumbed straight from `c.ComponentConfig.Generic.LeaderElection.*`.
+5. `staging/src/k8s.io/client-go/tools/leaderelection/leaderelection.go:279 renew(ctx)` — the actual loop: `wait.UntilWithContext(..., RetryPeriod)` wrapping `wait.PollUntilContextTimeout(ctx, RetryPeriod, RenewDeadline, ...)` repeatedly calling `tryAcquireOrRenew`. If no successful renewal occurs within `RenewDeadline`, the leader gives up.
+
+**Where the lease-renewal interval is configured.** Three knobs, defaults at `staging/src/k8s.io/component-base/config/v1alpha1/defaults.go:35` (15s / 10s / 2s):
+
+| Field | Default | CLI flag | Meaning |
+|---|---|---|---|
+| `LeaseDuration` | 15s | `--leader-elect-lease-duration` | how long a candidate waits since the last observed renew before forcing takeover |
+| `RenewDeadline` | 10s | `--leader-elect-renew-deadline` | how long the leader keeps retrying renewals before giving up |
+| **`RetryPeriod`** | **2s** | **`--leader-elect-retry-period`** | **the renewal interval — how often the leader pokes the apiserver** |
+
+Flag binder: `staging/src/k8s.io/component-base/config/options/leaderelectionconfig.go:25`. API type: `staging/src/k8s.io/component-base/config/types.go:41` (`LeaderElectionConfiguration`). KCM embeds it via `staging/src/k8s.io/controller-manager/config/types.go:40` (`GenericControllerManagerConfiguration.LeaderElection`). Invariants enforced in `NewLeaderElector`: `LeaseDuration > RenewDeadline > RetryPeriod * 1.2`.
+
+So if "lease-renewal interval" means *how often a renew is attempted*, that's `--leader-elect-retry-period` (2s default). If it means *the deadline by which a renew must succeed before the leader steps down*, that's `--leader-elect-renew-deadline` (10s default).

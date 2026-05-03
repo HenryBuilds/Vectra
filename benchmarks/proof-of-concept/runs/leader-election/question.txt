@@ -1,0 +1,1 @@
+How does kube-controller-manager's leader election work, and where is the lease-renewal interval configured?

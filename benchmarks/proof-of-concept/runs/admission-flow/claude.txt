@@ -1,0 +1,40 @@
+I'll research the admission plugin ordering in the Kubernetes codebase. Let me launch parallel Explore agents to find where the order is defined and enforced.
+I have comprehensive findings. Since this is a knowledge question rather than an implementation task, I'll write up the answer as a research document at the plan file location, then exit plan mode.
+# Order
+
+For a CREATE Pod the apiserver runs the admission chain **twice** over the same ordered slice of plugins:
+
+1. **Mutating pass** — every plugin implementing `MutationInterface.Admit`, in `RecommendedPluginOrder`
+2. Strategy `PrepareForCreate` + `Validate` (defaults, schema validation)
+3. **Validating pass** — every plugin implementing `ValidationInterface.Validate`, in the **same** `RecommendedPluginOrder`
+4. Write to etcd
+
+A single plugin can be in both passes (e.g. `LimitRanger`); the type assertion at iteration time decides whether it participates in a given pass.
+
+# Where ordering is enforced
+
+Two places — one defines the order, one executes it.
+
+**Definition** — `pkg/kubeapiserver/options/plugins.go:73-120`, the `AllOrderedPlugins` slice. The load-bearing comment at lines 111-112 forces the tail order:
+
+```
+// new admission plugins should generally be inserted above here
+// webhook, resourcequota, and deny plugins must go at the end
+```
+
+So `MutatingAdmissionPolicy` → `MutatingAdmissionWebhook` → `ValidatingAdmissionPolicy` → `ValidatingAdmissionWebhook` → `ResourceQuota` → `AlwaysDeny` are pinned last (ResourceQuota must see the fully-mutated object).
+
+This slice is wired via `pkg/kubeapiserver/options/admission.go:56-68` (`options.RecommendedPluginOrder = AllOrderedPlugins`) and instantiated by `Plugins.NewFromPlugins(pluginNames, ...)` in `staging/src/k8s.io/apiserver/pkg/server/options/admission.go`.
+
+**Execution** — `staging/src/k8s.io/apiserver/pkg/admission/chain.go:31-60`. `chainAdmissionHandler` is just `[]Interface`; `Admit` and `Validate` each iterate it in slice order, with a type-assert filter:
+
+```go
+if mutator, ok := handler.(MutationInterface); ok { ... }   // Admit pass
+if validator, ok := handler.(ValidationInterface); ok { ... } // Validate pass
+```
+
+Interfaces at `staging/src/k8s.io/apiserver/pkg/admission/interfaces.go:129-144` (note the explicit "is NOT allowed to mutate" on `ValidationInterface.Validate`).
+
+**Sequencing for CREATE** is in the REST handler, `staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:183-206`: mutating admission is called inline, then validating admission is wrapped via `rest.AdmissionToValidateObjectFunc` (`staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:202-235`) and handed to `r.Create`. The store invokes it after `BeforeCreate` (strategy validation) and before the etcd write at `staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:485-518`.
+
+Full notes with code excerpts saved to `~/.claude/plans/when-a-create-pod-serialized-whistle.md`. Since this was a research question rather than an implementation task, I'm not calling ExitPlanMode — let me know if you want me to dig into any specific plugin (e.g. how `ServiceAccount` mutates the pod, or how `ResourceQuota` handles the late-stage bookkeeping).

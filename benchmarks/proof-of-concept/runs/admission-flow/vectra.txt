@@ -1,0 +1,13 @@
+I'll research how admission plugin ordering works for CREATE Pod requests in the Kubernetes API server. Let me explore the relevant code.
+Let me verify the key file paths and line numbers before finalizing my plan.
+All key facts verified. This is a research question rather than a code-change task, so the "plan" deliverable is the answer documenting the ordering with concrete code citations. Let me write it.
+The plan file documents the answer with verified citations. Let me load the ExitPlanMode tool to finalize.
+The plan file at `C:\Users\German Classic\.claude\plans\task-when-a-create-parsed-wadler.md` contains the full answer with verified file:line citations. Short summary:
+
+- **Order:** mutating phase first (every `MutationInterface` plugin in `AllOrderedPlugins` order), then validating phase (every `ValidationInterface` plugin in the same order). Webhooks and `ResourceQuota` sit at the end of the slice by design.
+- **Where it's enforced:**
+  - `pkg/kubeapiserver/options/plugins.go:73-120` — `AllOrderedPlugins` is the source of truth.
+  - `staging/src/k8s.io/apiserver/pkg/server/options/admission.go:228-245` — `enabledPluginNames()` filters that slice while preserving order.
+  - `staging/src/k8s.io/apiserver/pkg/admission/plugins.go:127-163` — `NewFromPlugins` builds a single ordered handler chain.
+  - `staging/src/k8s.io/apiserver/pkg/admission/chain.go:21-60` — `chainAdmissionHandler.Admit` and `.Validate` walk the same slice for the two phases.
+  - `staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:202-209` invokes the mutating phase, then `staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:202-235` (`AdmissionToValidateObjectFunc`) runs the validating phase from inside `genericregistry.Store.Create`, just before the etcd write.

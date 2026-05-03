@@ -1,0 +1,79 @@
+{
+  "id": "kubelet-eviction",
+  "vectra": {
+    "wall_seconds": 177.58,
+    "result": {
+      "duration_ms": 176282,
+      "total_cost_usd": 0.8779659500000001,
+      "num_turns": 7,
+      "usage": {
+        "input_tokens": 16,
+        "cache_creation_input_tokens": 67341,
+        "cache_read_input_tokens": 252525,
+        "output_tokens": 9082,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 67341,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [
+          {
+            "input_tokens": 6,
+            "output_tokens": 1540,
+            "cache_read_input_tokens": 19413,
+            "cache_creation_input_tokens": 33805,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 33805
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      }
+    }
+  },
+  "claude": {
+    "wall_seconds": 189.3,
+    "result": {
+      "duration_ms": 188177,
+      "total_cost_usd": 1.1135552000000002,
+      "num_turns": 7,
+      "usage": {
+        "input_tokens": 14,
+        "cache_creation_input_tokens": 63821,
+        "cache_read_input_tokens": 169995,
+        "output_tokens": 9642,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 63821,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [
+          {
+            "input_tokens": 1,
+            "output_tokens": 1010,
+            "cache_read_input_tokens": 51515,
+            "cache_creation_input_tokens": 652,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 652
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      }
+    }
+  }
+}
