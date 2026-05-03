@@ -1,22 +1,25 @@
 # Vectra
 
-**Local-first code RAG and coding assistant.** Vectra indexes your codebase
-with tree-sitter, embeds it on-device via llama.cpp, and answers code
-questions with hybrid vector + symbol retrieval, cross-encoder reranking,
-and a self-healing patch loop. No cloud, no telemetry, single binary.
+**Local-first code RAG that dispatches to Claude Code.** Vectra indexes
+your repo with tree-sitter (33 languages), embeds it on-device via
+llama.cpp, retrieves with hybrid vector + symbol search and an optional
+cross-encoder reranker, and hands the top-K chunks to `claude -p` as
+labeled context. Claude Code does the editing through its own tools;
+Vectra never touches files on its own. No cloud, no telemetry, single
+binary.
 
-> **Status:** Pre-alpha. Repository scaffolding only — no working features yet.
-> See [`architecture.md`](./architecture.md) for the design.
+> **Status:** 0.6.0 — usable end-to-end via the VS Code extension or the
+> CLI. See [`CHANGELOG.md`](./CHANGELOG.md) for what's in the current
+> release and [`architecture.md`](./architecture.md) for the design.
 
 ## Why Vectra
 
 Existing code assistants either ship your code to a remote API or run a
 generic embedding model that doesn't understand code structure. Vectra
-treats code as a structured object: AST-aware chunking, hierarchical
-context (function → class → call-graph → file), hybrid retrieval that
-combines semantic similarity with exact identifier matches, and a
-language-aware execution loop that can compile and re-test patches it
-generates.
+treats code as a structured object: AST-aware chunking, symbol-level
+hybrid retrieval that combines semantic similarity with exact
+identifier matches, and a tight handoff to Claude Code for the actual
+editing. Retrieval is Vectra's job; editing is Claude's.
 
 Read the full architecture in [`architecture.md`](./architecture.md).
 
@@ -151,8 +154,7 @@ vectra/
 │   ├── store/               SQLite + usearch persistence
 │   ├── embed/               llama.cpp embedding wrapper
 │   ├── retrieve/            Hybrid query path + reranker
-│   ├── exec/                Diff, language adapters, patch loop
-│   └── cli/                 Command-line entry point
+│   └── cli/                 Subcommands: index, search, ask, model
 ├── include/vectra/          Public headers
 ├── tests/                   Catch2 unit tests
 └── benchmarks/              google/benchmark perf tests
@@ -160,7 +162,7 @@ vectra/
 
 ### Cloning with submodules
 
-Vectra vendors `llama.cpp`, `tree-sitter`, `usearch`, and seven
+Vectra vendors `llama.cpp`, `tree-sitter`, `usearch`, and 33
 tree-sitter grammars as git submodules under `third_party/`. Always
 clone with submodules:
 
@@ -174,19 +176,87 @@ If you cloned without `--recurse-submodules`, run:
 git submodule update --init --recursive
 ```
 
-## Roadmap
+## Troubleshooting
 
-The work breaks down into discrete bootstrap steps:
+### "Model not cached" when running `vectra ask --model …`
 
-1. **Repository scaffolding** — CMake, vcpkg, presets, license, CI _(this commit)_
-2. **CI matrix** — Linux/macOS/Windows × Clang/GCC/MSVC, all green
-3. **Submodule wiring** — llama.cpp, tree-sitter, language grammars
-4. **`vectra-core`** — AST chunker + Merkle index
-5. **`vectra-store`** — SQLite schema + usearch sync
-6. **`vectra index <path>`** — first end-to-end CLI command
-7. **`vectra-embed`** — llama.cpp embedding pipeline
-8. **`vectra-retrieve`** — hybrid query + reranker
-9. **`vectra-exec`** — patch loop + language adapters
+Vectra resolves model names through llama.cpp's GGUF model store
+(`~/.cache/llama.cpp` on Linux/macOS, `%LOCALAPPDATA%\llama.cpp` on
+Windows). If the model isn't already on disk, the CLI prints a
+"model not cached" error instead of silently downloading. Fix:
+
+```bash
+vectra model pull qwen3-embedding-0.6b
+# Or, if you want the reranker:
+vectra model pull qwen3-reranker-0.6b
+```
+
+The VS Code extension auto-pulls the embedding model on first
+`reindex-with-model` so users typically don't see this. If the pull
+itself fails, check connectivity to `huggingface.co` — the registry
+is HF Hub.
+
+### GPU not detected at configure time
+
+`cmake --preset release` probes for CUDA → ROCm/HIP → Vulkan and
+flips `VECTRA_GPU_*` automatically. If it falls through to CPU on
+a machine with a GPU, the most common causes:
+
+- **CUDA**: `CUDAToolkit_ROOT` / `CUDA_PATH` not on PATH. Check
+  `nvcc --version` works from the same shell.
+- **ROCm**: `hip` package not exporting a CMake config — install
+  `rocm-cmake` and set `CMAKE_PREFIX_PATH=/opt/rocm`.
+- **Vulkan**: SDK installed but `VULKAN_SDK` not exported.
+
+Force a backend explicitly to skip the probe:
+
+```bash
+cmake --preset release -DVECTRA_GPU_CUDA=ON      # or _METAL/_HIP/_VULKAN
+```
+
+Verify the result by grep'ing the configure log for `GPU backend  :`
+or by running `vectra ask --model qwen3-embedding-0.6b "test"` and
+watching for `ggml_cuda_init: found N CUDA devices` in stderr. If
+the embedder loads but no CUDA line appears, the binary was linked
+without the GPU backend — re-configure with the explicit preset.
+
+### Permission modal hangs in the VS Code extension
+
+`ask` mode routes every Edit / Write / Bash through an in-chat
+approval modal with a 90-second timeout. If the modal never shows
+up at all, the `claude` ↔ MCP ↔ host bridge has lost a hop. Check
+the **Vectra** output channel (View → Output → Vectra) — every hop
+logs there. Common fixes:
+
+- A previous `vectra ask` left the chat in a stuck state: click
+  "+ New chat" to spawn a fresh subprocess.
+- Re-install the VSIX after upgrading; old bridge versions don't
+  match the current MCP wire shape.
+- Switch the mode picker to `auto` to bypass approvals while
+  debugging the bridge.
+
+### Claude says it edited a file but nothing changed
+
+Claude Code occasionally narrates an edit ("I've updated the
+import …") in plain text without actually emitting an Edit /
+Write / MultiEdit tool call. The webview detects this heuristically
+and surfaces a yellow warning banner. When you see it: re-prompt
+with "actually run the Edit tool — don't just describe it" and the
+next turn usually goes through.
+
+### Stale VSIX after a Vectra upgrade
+
+After installing a new VSIX, **fully reload the window** (`Developer:
+Reload Window` in the command palette) — VS Code keeps the old host
+process running otherwise, and you'll see pre-upgrade behaviour.
+
+### Windows build: STL link errors / `nvcc: A single input file is required`
+
+See [`architecture.md`](./architecture.md) → *Build-time toolchain
+pitfalls (Windows)* for the exhaustive list. Short version: build
+from a VS 18 developer command prompt with Ninja, and pass
+`-DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler` for CUDA on a VS 18
+host until you upgrade to CUDA Toolkit 12.8+.
 
 ## License
 
