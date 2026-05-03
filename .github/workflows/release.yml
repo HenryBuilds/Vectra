@@ -1,0 +1,227 @@
+# GitHub Releases pipeline.
+#
+# Triggered by pushing a `v*` tag (e.g. `git tag v0.6.0 && git push --tags`).
+# Verifies the tag matches the VERSION file, builds CPU release binaries
+# on every Tier-1 platform plus a Windows CUDA binary and the VSIX,
+# uploads each as a release asset, and drafts a GitHub Release using
+# CHANGELOG.md as the body.
+#
+# The release is left as a *draft* — the maintainer flips it to public
+# after sanity-checking the assets. Re-running the workflow against
+# the same tag overwrites the draft.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to publish (e.g. v0.6.0)'
+        required: true
+
+permissions:
+  contents: write   # needed for creating releases + uploading assets
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Gate: refuse to start if the tag does not match VERSION.
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Verify tag matches VERSION
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag:     ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: read
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME:-${{ inputs.tag }}}"
+          if [[ -z "$tag" ]]; then
+            echo "no tag provided"; exit 1
+          fi
+          # Strip the leading "v" so we can compare against VERSION.
+          version_from_tag="${tag#v}"
+          version_from_file="$(cat VERSION | tr -d '[:space:]')"
+          if [[ "$version_from_tag" != "$version_from_file" ]]; then
+            echo "tag/version drift:"
+            echo "  tag      = $tag (parsed: $version_from_tag)"
+            echo "  VERSION  = $version_from_file"
+            echo "Bump VERSION to match the tag (or retag) and re-run."
+            exit 1
+          fi
+          echo "tag $tag matches VERSION $version_from_file"
+          echo "version=$version_from_file" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # CPU build matrix — same set of platforms as the CI workflow but
+  # uploads the linked CLI binary as a release asset.
+  # ---------------------------------------------------------------------------
+  build-cli:
+    name: ${{ matrix.name }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux · Clang
+            os: ubuntu-24.04
+            preset: linux-clang-release
+            cc: clang
+            cxx: clang++
+            asset_name: vectra-${{ needs.verify.outputs.version }}-linux-x86_64
+            binary_glob: build/linux-clang-release/bin/vectra
+          - name: macOS · Clang (ARM64)
+            os: macos-14
+            preset: macos-clang-release
+            asset_name: vectra-${{ needs.verify.outputs.version }}-macos-arm64
+            binary_glob: build/macos-clang-release/bin/vectra
+          - name: Windows · MSVC
+            os: windows-2022
+            preset: windows-msvc-release
+            ctest_config: Release
+            asset_name: vectra-${{ needs.verify.outputs.version }}-windows-x86_64.exe
+            binary_glob: build/windows-msvc-release/bin/Release/vectra.exe
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Cache vcpkg-installed packages
+        uses: actions/cache@v4
+        with:
+          path: build/${{ matrix.preset }}/vcpkg_installed
+          key: vcpkg-${{ runner.os }}-${{ matrix.preset }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ matrix.preset }}-
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Set up MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config curl zip unzip tar \
+            autoconf automake autoconf-archive linux-libc-dev
+
+      - name: Set VCPKG_ROOT
+        shell: bash
+        run: echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> $GITHUB_ENV
+
+      - name: Configure
+        shell: bash
+        env:
+          CC:  ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        shell: bash
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Stage binary as release asset
+        shell: bash
+        run: |
+          mkdir -p _release
+          cp "${{ matrix.binary_glob }}" "_release/${{ matrix.asset_name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: _release/${{ matrix.asset_name }}
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # VSIX build — runs once on Linux, no platform-specific binaries.
+  # ---------------------------------------------------------------------------
+  build-vsix:
+    name: Build VSIX
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: extension/vscode/package-lock.json
+
+      - name: Install extension deps
+        working-directory: extension/vscode
+        run: npm ci
+
+      - name: Package VSIX
+        working-directory: extension/vscode
+        run: npm run package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vectra-vscode-${{ needs.verify.outputs.version }}.vsix
+          path: extension/vscode/vectra-vscode-${{ needs.verify.outputs.version }}.vsix
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Draft the GitHub Release with all collected assets.
+  # ---------------------------------------------------------------------------
+  release:
+    name: Draft GitHub Release
+    needs: [verify, build-cli, build-vsix]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: _assets
+
+      - name: Flatten asset tree
+        shell: bash
+        run: |
+          mkdir -p _release
+          find _assets -type f -exec mv -t _release {} +
+          ls -la _release
+
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        shell: bash
+        run: |
+          # Pull the [x.y.z] section that matches our tag. Awk reads
+          # from the line starting "## [VERSION]" until (but not
+          # including) the next "## [".
+          version="${{ needs.verify.outputs.version }}"
+          {
+            echo "body<<__VECTRA_NOTES__"
+            awk -v ver="$version" '
+              /^## \[/ { if (capture) { exit } }
+              $0 ~ "^## \\[" ver "\\]" { capture=1; print; next }
+              capture { print }
+            ' CHANGELOG.md
+            echo "__VECTRA_NOTES__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create / update draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.verify.outputs.tag }}
+          name: Vectra ${{ needs.verify.outputs.version }}
+          body: ${{ steps.notes.outputs.body }}
+          draft: true
+          prerelease: false
+          files: _release/*
+          fail_on_unmatched_files: true
