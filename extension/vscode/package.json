@@ -2,7 +2,7 @@
   "name": "vectra-vscode",
   "displayName": "Vectra",
   "description": "Local-first code RAG dispatch to Claude Code",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "vectra",
   "license": "Apache-2.0",
   "repository": {
@@ -191,7 +191,8 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run check-version && npm run compile",
+    "check-version": "node scripts/check-version.js",
     "compile": "npm run build:host && npm run build:webview",
     "build:host": "tsc -p tsconfig.host.json",
     "build:webview": "esbuild src/webview/index.tsx --bundle --minify --format=iife --target=es2022 --outfile=out/webview.js --jsx=automatic --platform=browser --loader:.css=text",

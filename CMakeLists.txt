@@ -3,8 +3,15 @@ cmake_minimum_required(VERSION 3.25)
 # ---------------------------------------------------------------------------
 # Project
 # ---------------------------------------------------------------------------
+# Single source of truth for the version number lives in the
+# top-level VERSION file. CMakeLists.txt, the VS Code extension
+# manifest and the GitHub Releases workflow all read from there
+# so a release bump is one edit instead of three.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" _vectra_version_raw)
+string(STRIP "${_vectra_version_raw}" _vectra_version)
+
 project(vectra
-    VERSION     0.0.1
+    VERSION     ${_vectra_version}
     DESCRIPTION "Local-first code RAG and coding assistant"
     LANGUAGES   C CXX
 )
