@@ -34,6 +34,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { ChatStorage, relativeTime } from './chatStorage';
+import { checkToolPath } from './pathPolicy';
 import type { PermissionBridge, PermissionRequest } from './permissionBridge';
 
 interface SendMessage {
@@ -200,7 +201,46 @@ export class VectraChatPanel {
         // Bridge → webview: forward each in-flight permission
         // request to the chat panel as a permissionRequest message.
         // The webview owns the modal queue; we just route.
+        //
+        // Path-policy gate: any path-bearing tool call (Edit / Write
+        // / MultiEdit / NotebookEdit) is resolved against the active
+        // workspace root before we even show the modal. Outside-the-
+        // workspace requests are auto-denied with a chat-visible
+        // explanation, so the user can never accidentally rubber-
+        // stamp an edit to /etc/* or %WINDIR%\System32 by clicking
+        // through the dialog too quickly.
         this.bridge.setListener((req: PermissionRequest) => {
+            const verdict = checkToolPath(req.toolName, req.toolInput, this.workspaceRoot());
+            if (verdict.kind === 'deny') {
+                this.output.appendLine(
+                    `[chat] auto-deny ${req.requestId} tool=${req.toolName} — ${verdict.reason}`,
+                );
+                this.post({
+                    type: 'meta',
+                    id: 'global',
+                    text:
+                        `vectra: blocked ${req.toolName} on path outside workspace ` +
+                        `(${verdict.resolvedPath}). The user was not prompted.\n`,
+                });
+                this.bridge.resolve(req.requestId, {
+                    decision: 'deny',
+                    reason: verdict.reason,
+                });
+                return;
+            }
+            if (verdict.kind === 'no-workspace') {
+                this.output.appendLine(
+                    `[chat] auto-deny ${req.requestId} tool=${req.toolName} — no workspace open`,
+                );
+                this.bridge.resolve(req.requestId, {
+                    decision: 'deny',
+                    reason:
+                        'vectra: no workspace folder is open, so file-modifying tools ' +
+                        'cannot be approved.',
+                });
+                return;
+            }
+
             this.output.appendLine(
                 `[chat] forwarding approval ${req.requestId} tool=${req.toolName} → webview`,
             );
