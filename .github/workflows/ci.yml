@@ -204,3 +204,33 @@ jobs:
 
       - name: Build (compile only — no GPU on the runner)
         run: cmake --build --preset linux-gcc-cuda-release
+
+  # ---------------------------------------------------------------------------
+  # Extension test suite — vitest over the host-side pure modules
+  # (pathPolicy, allowList, helpers). Cheap, single-runner, no
+  # workspace state needed. End-to-end tests against a live VS Code
+  # would belong in a separate job under @vscode/test-electron.
+  # ---------------------------------------------------------------------------
+  extension-tests:
+    name: Extension · vitest
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: extension/vscode/package-lock.json
+
+      - name: Install extension deps
+        working-directory: extension/vscode
+        run: npm ci
+
+      - name: Type-check host
+        working-directory: extension/vscode
+        run: npm run build:host
+
+      - name: Run vitest
+        working-directory: extension/vscode
+        run: npm test

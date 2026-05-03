@@ -293,7 +293,8 @@
     "watch": "concurrently \"npm:watch:host\" \"npm:watch:webview\"",
     "watch:host": "tsc -watch -p tsconfig.host.json",
     "watch:webview": "esbuild src/webview/index.tsx --bundle --watch --sourcemap --format=iife --target=es2022 --outfile=out/webview.js --jsx=automatic --platform=browser",
-    "package": "vsce package --no-dependencies"
+    "package": "vsce package --no-dependencies",
+    "test": "vitest run"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -307,6 +308,7 @@
     "@vscode/vsce": "^3.2.0",
     "concurrently": "^9.0.0",
     "esbuild": "^0.24.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.9"
   }
 }
