@@ -66,8 +66,14 @@ Code path: [`src/cli/walker.cpp`](src/cli/walker.cpp), [`src/cli/index_command.c
   out by default, closing a secret-leak vector where API keys
   could otherwise land in the embedding index and be sent to
   claude as context.
-- Tree-sitter parses each supported file (C, C++, Python, JS, TS,
-  Rust, Go) into an AST.
+- Tree-sitter parses each supported file into an AST. The current
+  language set (33 grammars, registered in [languages.toml](languages.toml))
+  spans systems (C, C++, Rust, Go, Zig), scripting (Python, Ruby,
+  Lua, Bash, R), JVM (Java, Kotlin, Scala, Clojure), web (JS, TS,
+  TSX, HTML, CSS, PHP, Dart), functional (Haskell, OCaml, Elixir),
+  config/data (JSON, YAML, TOML, Dockerfile, HCL, Make, SQL), and
+  docs (Markdown). Unparseable files fall through to a whole-file
+  chunk so they still show up in FTS5.
 - The chunker emits one chunk per top-level symbol (function, class,
   method, namespace block) with line ranges and the symbol name.
 - Each chunk is hashed (blake3, file-content level) and persisted to
@@ -93,6 +99,14 @@ Code path: [`src/cli/walker.cpp`](src/cli/walker.cpp), [`src/cli/index_command.c
   level but the in-memory usearch HNSW shares one geometry, and
   `put_embedding` rejects dim mismatches. To switch models, delete
   `.vectra/index.db` and re-index from scratch.
+- **Auto-indexer (extension only).** The VS Code extension owns a
+  `FileSystemWatcher` that fires on file create / change / delete
+  inside the workspace, debounces ~2s, and triggers a `vectra index`
+  re-run on the affected paths. Concurrent runs are serialized
+  through an in-process FIFO mutex (`indexLock`) — overlapping
+  saves coalesce into one queued re-index instead of stomping on
+  each other's WAL. The CLI itself has no watcher; one-shot
+  invocations are still the model.
 
 ### 2. Storage — a single SQLite file
 
@@ -199,6 +213,20 @@ Throughput on a 5070 + Qwen3-Embedding-0.6B is roughly **300–800
 chunks/sec** end-to-end (tokenize + forward pass + L2-norm + SQLite
 upsert). On CPU the same workload sits around 50–80 chunks/sec.
 
+#### Auto-detection at configure time
+
+`cmake --preset release` (no GPU preset chosen) probes the host:
+`find_package(CUDAToolkit QUIET)`, then `find_package(hip CONFIG)`,
+then `find_package(Vulkan)`, and on macOS the Metal framework. The
+first one that succeeds flips the matching `VECTRA_GPU_*` cache
+variable and `VECTRA_AUTO_GPU=ON` so subsequent configures stay
+sticky. To force a specific backend, use the explicit preset
+(`linux-clang-cuda-release`, `macos-clang-metal-release`, …) which
+inherits the hidden `_gpu-cuda-multiarch` mixin and pins
+`CMAKE_CUDA_ARCHITECTURES=75-virtual;80-virtual;86-real;89-real;120a-real` —
+the same redistributable arch list ggml ships, covering Turing
+through Blackwell.
+
 #### Build-time toolchain pitfalls (Windows)
 
 - **VS 18 dev shell is required.** CMake's MSVC detection trips
@@ -215,10 +243,6 @@ upsert). On CPU the same workload sits around 50–80 chunks/sec.
   input file is required ...`). The CMake fix:
   `target_compile_options(... PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/Zc:char8_t->)`.
   Same shape for `-fno-char8_t` on Clang/GCC.
-- **Blackwell PTX.** CUDA 12.6 doesn't know `sm_120` (RTX 50-series).
-  Configure with `-DCMAKE_CUDA_ARCHITECTURES=89-virtual` so PTX is
-  emitted for Ada and JIT-compiled forward to Blackwell at runtime.
-  CUDA 12.8+ would generate native sm_120 SASS.
 
 ### 6. Conversation continuity — `--session-id` / `--resume`
 
@@ -322,6 +346,58 @@ Code path: [`extension/vscode/`](extension/vscode/).
   root, model not cached) and renders a structured error bubble
   with an action button (e.g. "Index this workspace" → invokes
   `vectra.index`).
+- **Mode picker** — three permission modes selectable in the UI:
+  - `auto` (default) — `--permission-mode bypassPermissions`,
+    Claude edits without asking.
+  - `ask` — every Edit / Write / MultiEdit / Bash routes through
+    the in-chat approval modal (see below).
+  - `plan` — `--permission-mode plan`, Claude proposes a plan and
+    waits for the user to accept before any tool use.
+
+#### Permission bridge (`ask` mode)
+
+When the mode is `ask`, the host spawns Claude with
+`--permission-prompt-tool mcp__vectra__request_permission` and
+ships a stdio MCP server in `extension/vscode/scripts/mcp-permission-server.js`
+as the `vectra` MCP. Claude routes every tool call through this
+server, which forwards to a localhost HTTP bridge owned by the
+host (random port, bearer-token authenticated, listens on `127.0.0.1`).
+
+The flow per approval:
+
+```
+claude (subprocess)
+  ↓  mcp__vectra__request_permission(toolName, input)
+mcp-permission-server.js (stdio, child of claude)
+  ↓  POST /request  (bearer auth)
+permissionBridge.ts (host, HTTP localhost)
+  ↓  postMessage({ type: 'permissionRequest', … })
+PermissionModal.tsx (webview)
+  ↑  user clicks Approve / Deny
+  ↓  postMessage({ approved, … })
+permissionBridge.ts
+  ↓  HTTP response { behavior: "allow" | "deny", message? }
+mcp-permission-server.js → claude
+```
+
+The wire format on the bridge → MCP hop is internal
+(`{ decision, reason }`), translated to Claude's official
+`{ behavior: "allow" | "deny", message? }` shape via an
+`asClaudeVerdict()` helper before being returned to claude.
+Approvals time out after **90 s** and fall through as a deny so
+the user can't get stuck on a pending modal. The webview shows
+a tool-aware preview (Edit → diff, Write → new contents, Bash →
+command + risk classification) and an elapsed-seconds counter.
+
+#### Edit-claim hallucination detection
+
+Claude occasionally narrates an edit ("I've updated the import
+…") in `text` blocks without actually emitting an `Edit` /
+`Write` / `MultiEdit` `tool_use`. The webview heuristically
+matches edit-claim verbs (DE + EN) in the assistant text and,
+if no successful edit-shaped tool call is present in the same
+turn, surfaces a yellow warning banner. Catches the failure
+mode without blocking legitimate output.
 
 ## Process model
 
