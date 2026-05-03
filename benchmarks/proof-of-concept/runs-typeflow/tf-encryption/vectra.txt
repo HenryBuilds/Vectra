@@ -1,0 +1,10 @@
+Here's the answer.
+
+**Where:** `lib/encryption.ts` — `encrypt()` at line 20, `decrypt()` at line 40, with `encryptObject` / `decryptObject` JSON wrappers at lines 67 / 71. The credentials router (`server/routers/credentials.ts`) calls `encryptObject` on create/update and `decryptObject` on read; the encrypted blob is stored in the `credentials.config` JSONB column (`db/schema/credentials.ts:12`) as a single string `"<ivHex>:<authTagHex>:<ciphertextHex>"`.
+
+**Algorithm:** AES-256-GCM (`lib/encryption.ts:16`) with a fresh 16-byte random IV per record and a 16-byte GCM auth tag.
+
+**Key:** From the `ENCRYPTION_KEY` env var, declared and required in `lib/env.ts:23` (Zod-validated; app exits at startup if missing). `getEncryptionKey()` at `lib/encryption.ts:5` either decodes it directly when it's exactly 64 hex chars (32 bytes), or derives a 32-byte key by SHA-256-hashing the raw string. Single global key — no KMS, no rotation, no per-tenant key.
+The answer is in the message above; I also saved it to the plan file at `C:\Users\German Classic\.claude\plans\task-where-in-typeflow-cozy-cupcake.md` for reference.
+
+Per the `ExitPlanMode` tool's own guidance, I'm not invoking it — this was a research question, not an implementation task, so there's nothing to approve. Let me know if you want me to dig deeper into any of the call sites (e.g., verify the exact line numbers in `server/routers/credentials.ts` or audit the AI executor decryption paths).

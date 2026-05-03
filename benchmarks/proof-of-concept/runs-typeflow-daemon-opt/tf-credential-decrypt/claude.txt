@@ -1,0 +1,16 @@
+Found it. Answering directly since this is a factual question, not an implementation task.
+
+## How typeflow fetches and decrypts AI provider keys
+
+**Flow** (server-side, when an AI Flow Builder node executes):
+
+1. The workflow executor calls `credentialService.getCredentials(organizationId)` in `server/services/credential-service.ts:291`.
+2. That method queries the `credentials` table filtered by `organizationId` (Drizzle: `eq(credentials.organizationId, organizationId)`), so you only ever see rows belonging to the current org.
+3. For each row, the encrypted `cred.config` blob is decrypted and JSON-parsed via **`decryptObject<CredentialConfig>(cred.config)`** — imported from `lib/encryption.ts`.
+4. The decrypted config is handed to `createClient(type, config)` (`credential-service.ts:322`), which instantiates an `OpenAICredential` / `AnthropicCredential` / etc. wrapper. These wrappers expose `.getClient()` returning a configured `new OpenAI({ apiKey, organization, baseURL })` or `new Anthropic({ apiKey, baseURL })`.
+5. Results are cached per `${organizationId}:${cred.id}` in an in-memory `clientCache` map, so subsequent node executions in the same process reuse the decrypted client.
+
+**The decrypt helper:** `decryptObject<T>(encryptedText: string): T` at `lib/encryption.ts:71`. It's a thin wrapper around `decrypt()` (`lib/encryption.ts:40`), which uses **AES-256-GCM** with the `ENCRYPTION_KEY` env var (hex-decoded if 64 chars, otherwise SHA-256-hashed to derive a 32-byte key). The stored format is `iv:authTag:ciphertext`, all hex.
+
+So the named helper you asked for is **`decryptObject`** (with the underlying primitive being `decrypt`), both exported from `lib/encryption.ts`.
+Per the ExitPlanMode docs, this was a research/Q&A task — no implementation steps to plan, so I'm not calling ExitPlanMode. The answer is in my previous message: `decryptObject` (from `lib/encryption.ts:71`), called by `credentialService.getCredentials()` at `server/services/credential-service.ts:309` after fetching the org-scoped row from the `credentials` table.

@@ -1,0 +1,4 @@
+Found it. The AI flow generation lives in **`server/routers/ai-flow-builder.ts`** (the tRPC `aiFlowBuilder.generateFlow` mutation called by `components/ai-flow-builder-panel.tsx`). It supports three providers — **OpenAI, Anthropic, and Google** — picked in that priority order from the org's stored credentials by `getModelForGeneration` at `server/routers/ai-flow-builder.ts:87`.
+
+Since this is a research question with no implementation needed, I'll write a short plan file recording the answer and exit.
+The answer is already in chat above: **`server/routers/ai-flow-builder.ts`**, supporting **OpenAI, Anthropic, and Google** (selected in that priority order from stored credentials). Per the `ExitPlanMode` tool's own guidance, it's not for research tasks, so I'll leave it there.

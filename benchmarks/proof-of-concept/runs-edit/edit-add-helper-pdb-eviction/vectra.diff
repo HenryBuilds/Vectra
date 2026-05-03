@@ -1,0 +1,15 @@
+diff --git a/pkg/registry/core/pod/storage/eviction.go b/pkg/registry/core/pod/storage/eviction.go
+index 412b7ef5..f9e8eebd 100644
+--- a/pkg/registry/core/pod/storage/eviction.go
++++ b/pkg/registry/core/pod/storage/eviction.go
+@@ -421,6 +421,10 @@ func createTooManyRequestsError(name string) error {
+ 	return err
+ }
+ 
++func pdbAllowsEviction(b *policyv1.PodDisruptionBudget) bool {
++	return b.Status.DisruptionsAllowed > 0
++}
++
+ // checkAndDecrement checks if the provided PodDisruptionBudget allows any disruption.
+ func (r *EvictionREST) checkAndDecrement(namespace string, podName string, pdb policyv1.PodDisruptionBudget, dryRun bool) error {
+ 	if pdb.Status.ObservedGeneration < pdb.Generation {

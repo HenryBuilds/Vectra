@@ -1,0 +1,40 @@
+POC harness — kubernetes clone at C:/Users/German Classic/Desktop/typeflow
+config: embed  ·  tasks: tasks-typeflow.json  ·  output: c:/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-typeflow-embed
+
+
+=== [tf-encryption] Where in typeflow are user-supplied credentials encrypted at rest, what algorithm is used, and where does the encryption key come from?
+  · vectra ask … [config=embed]
+  · claude -p …  (reused from baseline, 88.55s)
+  · wrote c:/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-typeflow-embed/tf-encryption/  (vectra 77.06s, claude 88.55s)
+
+=== [tf-sandbox] How does typeflow execute user-supplied JavaScript in a sandboxed context for workflow node code? Name the file, the entry function, and the underlying isolation primitive.
+  · vectra ask … [config=embed]
+  · claude -p …  (reused from baseline, 54.81s)
+  · wrote c:/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-typeflow-embed/tf-sandbox/  (vectra 32.59s, claude 54.81s)
+
+=== [tf-workflow-queue] How is a workflow execution dispatched as a BullMQ job in typeflow? Name the file, the function that adds a job to the queue, and the function that returns the singleton Queue instance.
+  · vectra ask … [config=embed]
+  · claude -p …  (reused from baseline, 23.94s)
+  · wrote c:/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-typeflow-embed/tf-workflow-queue/  (vectra 34.45s, claude 23.94s)
+
+=== [tf-executor-registry] How does typeflow's executor registry map workflow node types to their executor functions? Name the file, the registry class, and the registration method.
+  · vectra ask … [config=embed]
+  · claude -p …  (reused from baseline, 41.09s)
+  · wrote c:/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-typeflow-embed/tf-executor-registry/  (vectra 61.95s, claude 41.09s)
+
+=== [tf-ai-flow-builder] Where in typeflow does the AI assistant generate workflow nodes from a natural-language description, and which AI providers does it support? Name the file and the providers.
+  · vectra ask … [config=embed]
+  · claude -p …  (reused from baseline, 46.25s)
+  · wrote c:/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-typeflow-embed/tf-ai-flow-builder/  (vectra 54.30s, claude 46.25s)
+
+=== [tf-trpc-auth] How is authentication and organization-scoping enforced on typeflow's tRPC procedures? Name the procedure builder used for protected, organization-scoped endpoints.
+  · vectra ask … [config=embed]
+  · claude -p …  (reused from baseline, 37.38s)
+  · wrote c:/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-typeflow-embed/tf-trpc-auth/  (vectra 40.19s, claude 37.38s)
+
+=== [tf-credential-decrypt] When typeflow's AI Flow Builder needs to call OpenAI / Anthropic on the user's behalf, how does it fetch and decrypt the per-organization API key? Name the helper function used to decrypt credential payloads.
+  · vectra ask … [config=embed]
+  · claude -p …  (reused from baseline, 39.29s)
+  · wrote c:/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-typeflow-embed/tf-credential-decrypt/  (vectra 42.34s, claude 39.29s)
+
+All tasks complete. Outputs in c:/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-typeflow-embed

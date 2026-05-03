@@ -1,0 +1,1 @@
+In `pkg/registry/core/pod/storage/eviction.go`, add a small unexported helper function named `pdbAllowsEviction` immediately above `checkAndDecrement`. The helper takes a single `*policyv1.PodDisruptionBudget` argument and returns `b.Status.DisruptionsAllowed > 0`. Do not modify any other function in the file, and do not change any imports.

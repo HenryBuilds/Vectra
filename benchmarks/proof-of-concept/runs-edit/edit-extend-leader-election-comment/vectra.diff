@@ -1,0 +1,14 @@
+diff --git a/cmd/kube-controller-manager/app/controllermanager.go b/cmd/kube-controller-manager/app/controllermanager.go
+index 016b00bb..e4f96012 100644
+--- a/cmd/kube-controller-manager/app/controllermanager.go
++++ b/cmd/kube-controller-manager/app/controllermanager.go
+@@ -835,8 +835,7 @@ func createClientBuilders(c *config.CompletedConfig) (clientBuilder clientbuilde
+ 	return
+ }
+ 
+-// leaderElectAndRun runs the leader election, and runs the callbacks once the leader lease is acquired.
+-// TODO: extract this function into staging/controller-manager
++// leaderElectAndRun runs the controller manager under a Lease-based leader election.
+ func leaderElectAndRun(ctx context.Context, c *config.CompletedConfig, lockIdentity string, electionChecker *leaderelection.HealthzAdaptor, resourceLock string, leaseName string, callbacks leaderelection.LeaderCallbacks) {
+ 	logger := klog.FromContext(ctx)
+ 	rl, err := resourcelock.NewFromKubeconfig(resourceLock,

@@ -1,0 +1,26 @@
+I'll investigate the encryption setup. Let me start by reading the encryption module in full and finding where credentials get encrypted (not just decrypted).
+Let me also verify how the `ENCRYPTION_KEY` env var is sourced/validated.
+I have everything needed to answer. Let me write the findings to the plan file.
+This is a research question — no implementation needed, so here's the answer directly:
+
+**Where credentials are encrypted at rest**
+The encryption helpers live in `lib/encryption.ts`. They're called from exactly two places, both in the credentials tRPC router:
+- `server/routers/credentials.ts:151` — `create` mutation: `encryptObject(input.config)` before insert.
+- `server/routers/credentials.ts:217` — `update` mutation: same call when config changes.
+
+The ciphertext is stored in the `credentials.config` column. Decryption happens at use-time, e.g. `server/services/ai/agent-executor.ts:128` and `server/services/ai/text-classifier-executor.ts:30`.
+
+**Algorithm** (`lib/encryption.ts:16-18`, `20-38`)
+- **AES-256-GCM** (authenticated).
+- 16-byte random IV per encryption (note: GCM's standard IV size is 12 bytes; this uses 16 — Node accepts it but it's non-standard).
+- 16-byte GCM auth tag, set via `cipher.getAuthTag()` and verified on decrypt.
+- On-disk format is a single string: `${ivHex}:${authTagHex}:${ciphertextHex}`.
+
+**Where the key comes from** (`lib/encryption.ts:5-14`)
+1. Read from the `ENCRYPTION_KEY` env var, validated by Zod in `lib/env.ts:23-25` (required, but only `min(1)` — no length or hex-format check).
+2. If the string is exactly 64 chars, it's parsed as 32 bytes of hex and used directly.
+3. Otherwise, the key is derived as `sha256(ENCRYPTION_KEY)` — a single SHA-256 pass, **not a KDF and not salted**, so a weak env var stays weak.
+
+Two notes worth flagging:
+- The user-facing docs at `app/docs/credentials/page.tsx` claim "Encryption keys are stored separately and rotated regularly" — this is aspirational; in code the key is a single env var with no rotation mechanism.
+- Full findings are in `C:\Users\German Classic\.claude\plans\task-where-in-typeflow-tingly-diffie.md`.

@@ -1,0 +1,18 @@
+The AI assistant for generating workflow nodes from natural-language descriptions lives in:
+
+**File:** `server/routers/ai-flow-builder.ts`
+
+**Supported providers** (from `getModelForGeneration()` at lines 87–109, tried in priority order):
+
+1. **OpenAI** — `gpt-4o-mini`
+2. **Anthropic** — `claude-sonnet-4-20250514`
+3. **Google** — `gemini-2.0-flash`
+
+The chat UI that calls it is `components/ai-flow-builder-panel.tsx`.
+
+Let me write a brief plan note and exit plan mode, since this was a read-only question with no changes to make.
+The answer is already above — this was a research question, not an implementation task, so per ExitPlanMode's own guidance ("For research tasks ... do NOT use this tool"), no plan approval is needed.
+
+**Summary:**
+- **File:** `server/routers/ai-flow-builder.ts`
+- **Providers:** OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-20250514`), Google (`gemini-2.0-flash`)

@@ -1,0 +1,22 @@
+I'll investigate the encryption implementation and find where credentials get encrypted on write.
+I have everything needed. Writing the answer to the plan file.
+This is a research question, not an implementation, so I'll answer directly rather than exiting plan mode.
+
+**Where credentials get encrypted (write side):** `server/routers/credentials.ts:151` (create) and `:217` (update). Both call `encryptObject(input.config)` from `lib/encryption.ts` before the `db.insert`/`db.update` on the `credentials` table — so the `credentials.config` column always holds ciphertext. Decryption happens at use-time, e.g. `server/services/ai/agent-executor.ts:139` and `server/services/ai/text-classifier-executor.ts:38`.
+
+**Algorithm:** **AES-256-GCM** (`lib/encryption.ts:16`).
+- 16-byte random IV per encryption, 16-byte GCM auth tag
+- Stored as `iv_hex:authTag_hex:ciphertext_hex`
+- `decipher.setAuthTag` is set on read, so tampering is detected
+- Matches the public claim in `app/docs/credentials/page.tsx`
+
+**Key source:** `process.env.ENCRYPTION_KEY`, validated in `lib/env.ts:23-25` (required, `min(1)` — no length constraint). Derivation in `getEncryptionKey()` at `lib/encryption.ts:5-14`:
+- If exactly 64 chars → parsed as hex → 32 raw bytes used directly.
+- Otherwise → **SHA-256(key)** as the 32-byte AES key.
+
+**Things worth flagging:**
+- No KDF — short/low-entropy `ENCRYPTION_KEY` values silently get SHA-256'd with no salt, so the AES key inherits whatever entropy the env var has.
+- No key versioning in the stored format, so rotating `ENCRYPTION_KEY` would invalidate **all** existing rows. Despite the docs page claiming keys are "rotated regularly," there's no rotation code in the repo.
+- Key lives in process env only; no KMS/HSM integration.
+
+Full write-up saved at `C:\Users\German Classic\.claude\plans\task-where-in-typeflow-noble-lightning.md`.

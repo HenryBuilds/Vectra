@@ -1,0 +1,81 @@
+{
+  "id": "edit-rename-helper-priority",
+  "mode": "edit",
+  "config": "symbol-only",
+  "vectra": {
+    "wall_seconds": 15.61,
+    "result": {
+      "duration_ms": 14149,
+      "total_cost_usd": 0.14514475000000002,
+      "num_turns": 3,
+      "usage": {
+        "input_tokens": 7,
+        "cache_creation_input_tokens": 10349,
+        "cache_read_input_tokens": 121557,
+        "output_tokens": 786,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 10349,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [
+          {
+            "input_tokens": 1,
+            "output_tokens": 138,
+            "cache_read_input_tokens": 47057,
+            "cache_creation_input_tokens": 542,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 542
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      }
+    }
+  },
+  "claude": {
+    "wall_seconds": 18.07,
+    "result": {
+      "duration_ms": 17132,
+      "total_cost_usd": 0.1436695,
+      "num_turns": 6,
+      "usage": {
+        "input_tokens": 11,
+        "cache_creation_input_tokens": 2396,
+        "cache_read_input_tokens": 204279,
+        "output_tokens": 1060,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 2396,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [
+          {
+            "input_tokens": 1,
+            "output_tokens": 120,
+            "cache_read_input_tokens": 34974,
+            "cache_creation_input_tokens": 407,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 407
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      }
+    }
+  }
+}

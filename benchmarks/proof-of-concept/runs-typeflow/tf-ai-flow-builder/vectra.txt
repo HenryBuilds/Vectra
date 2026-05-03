@@ -1,0 +1,10 @@
+Based on the exploration, I have a definitive answer. Let me write the plan file with the findings.
+**File:** `server/routers/ai-flow-builder.ts` — the `aiFlowBuilderRouter` exposes a `generateFlow` tRPC mutation that takes a natural-language prompt and returns generated nodes/connections. The frontend entry point is `components/ai-flow-builder-panel.tsx`.
+
+**Providers (tried in this priority order; first available credential wins):**
+1. **OpenAI** (`gpt-4o-mini`)
+2. **Anthropic** (`claude-sonnet-4-20250514`)
+3. **Google** (`gemini-2.0-flash`)
+
+If none of those three credentials exist, the procedure errors out — even though the broader credentials system (`server/routers/credentials.ts`) also stores keys for Groq, Mistral, Ollama, DeepSeek, OpenRouter, and xAI, the flow generator itself doesn't use them.
+The question is answered above — `server/routers/ai-flow-builder.ts`, supporting OpenAI, Anthropic, and Google. Since this was a research question rather than an implementation task, no plan approval is needed.

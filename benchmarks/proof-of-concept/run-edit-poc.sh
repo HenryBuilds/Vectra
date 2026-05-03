@@ -1,76 +1,51 @@
 #!/usr/bin/env bash
 # Copyright 2026 Vectra Contributors. Apache-2.0.
 #
-# Benchmark harness — runs each task from tasks.json through:
-#   (a) `vectra ask`        (Vectra retrieval → claude -p)
-#   (b) `claude -p` plain   (Claude Code's own Glob/Grep/Read)
-# inside the kubernetes/kubernetes clone, capturing per-task:
-#   - the answer text
-#   - the result-event JSON (token totals, cost, duration)
-#   - wall-clock time
+# Edit-task harness — same shape as run-poc.sh but each task asks the
+# assistant to make a small, well-scoped code change rather than answer
+# a research question.
 #
-# Two axes:
+# Per task we:
+#   1. git -C "$KUBE_DIR" reset --hard HEAD             (clean tree)
+#   2. run `vectra ask`, capturing stream-json + final git diff
+#   3. git reset --hard HEAD                            (clean for next side)
+#   4. run `claude -p`, capturing the same
+#   5. git reset --hard HEAD                            (leave tree clean)
+#   6. write meta.json with {touched_path_match, anchor_match} per side
 #
-#   CONFIG=symbol-only | embed | embed-rerank   (default: symbol-only)
-#       Picks which Vectra retrieval flags to forward. The output
-#       directory mirrors the config:
-#           runs/                 ← symbol-only baseline (no flags)
-#           runs-embed/           ← --model qwen3-embed-0.6b
-#           runs-embed-rerank/    ← embed + --reranker qwen3-rerank-0.6b
-#       The Claude-alone path is identical across configs, so non-
-#       baseline runs *reuse* the cached claude.ndjson from runs/
-#       instead of re-spending tokens. Symlink-by-copy keeps the
-#       per-config directory self-contained for the report renderer.
-#
-#   TASKS_FILE=path/to/tasks.json                (default: tasks.json)
-#       Lets us swap the task set — research vs edit-tasks share the
-#       same harness; only the file changes.
+# Both pipelines run with `--permission-mode bypassPermissions` so
+# Edit / Write / Bash all execute without interactive approval —
+# otherwise `claude -p` would deadlock on the first tool call.
 #
 # Usage:
-#   KUBE_DIR=/path/to/kubernetes ./run-poc.sh
-#   KUBE_DIR=… CONFIG=embed ./run-poc.sh
-#   KUBE_DIR=… TASKS_FILE=tasks-edit.json ./run-poc.sh
+#   KUBE_DIR=/path/to/kubernetes ./run-edit-poc.sh
+#   KUBE_DIR=… CONFIG=embed ./run-edit-poc.sh
 
 set -euo pipefail
 
 POC_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG="${CONFIG:-symbol-only}"
-TASKS_FILE="${TASKS_FILE:-$POC_DIR/tasks.json}"
+TASKS_FILE="${TASKS_FILE:-$POC_DIR/tasks-edit.json}"
 KUBE_DIR="${KUBE_DIR:-$HOME/Desktop/kubernetes}"
 
-# Per-config output directory and Vectra flags. Anything outside
-# this case statement is shared across configs.
-# RUNS_DIR_OVERRIDE / BASELINE_RUNS_DIR_OVERRIDE let callers route a
-# secondary repo (e.g. typeflow) into its own output tree without
-# clobbering the original kubernetes data under runs/.
 case "$CONFIG" in
     symbol-only)
-        RUNS_DIR="${RUNS_DIR_OVERRIDE:-$POC_DIR/runs}"
+        RUNS_DIR="${RUNS_DIR_OVERRIDE:-$POC_DIR/runs-edit}"
         VECTRA_RETRIEVAL_FLAGS=()
         BASELINE_RUNS_DIR="${BASELINE_RUNS_DIR_OVERRIDE:-$RUNS_DIR}"
         ;;
     embed)
-        RUNS_DIR="${RUNS_DIR_OVERRIDE:-$POC_DIR/runs-embed}"
+        RUNS_DIR="${RUNS_DIR_OVERRIDE:-$POC_DIR/runs-edit-embed}"
         VECTRA_RETRIEVAL_FLAGS=(--model qwen3-embed-0.6b)
-        BASELINE_RUNS_DIR="${BASELINE_RUNS_DIR_OVERRIDE:-$POC_DIR/runs}"
+        BASELINE_RUNS_DIR="${BASELINE_RUNS_DIR_OVERRIDE:-$POC_DIR/runs-edit}"
         ;;
     embed-rerank)
-        RUNS_DIR="${RUNS_DIR_OVERRIDE:-$POC_DIR/runs-embed-rerank}"
+        RUNS_DIR="${RUNS_DIR_OVERRIDE:-$POC_DIR/runs-edit-embed-rerank}"
         VECTRA_RETRIEVAL_FLAGS=(--model qwen3-embed-0.6b --reranker qwen3-rerank-0.6b)
-        BASELINE_RUNS_DIR="${BASELINE_RUNS_DIR_OVERRIDE:-$POC_DIR/runs}"
-        ;;
-    daemon)
-        # Routes retrieval to a long-running `vectra serve`. Caller
-        # is responsible for starting the daemon with the embedder /
-        # reranker they want — the client side does not pass --model.
-        # DAEMON_URL env var lets you point at a non-default port;
-        # `127.0.0.1:7777` is the wrapper's default.
-        RUNS_DIR="${RUNS_DIR_OVERRIDE:-$POC_DIR/runs-daemon}"
-        VECTRA_RETRIEVAL_FLAGS=(--daemon-url "${DAEMON_URL:-http://127.0.0.1:7777}")
-        BASELINE_RUNS_DIR="${BASELINE_RUNS_DIR_OVERRIDE:-$POC_DIR/runs}"
+        BASELINE_RUNS_DIR="${BASELINE_RUNS_DIR_OVERRIDE:-$POC_DIR/runs-edit}"
         ;;
     *)
-        echo "error: CONFIG=$CONFIG is not one of {symbol-only, embed, embed-rerank, daemon}" >&2
+        echo "error: CONFIG=$CONFIG is not one of {symbol-only, embed, embed-rerank}" >&2
         exit 1
         ;;
 esac
@@ -90,14 +65,27 @@ fi
 
 mkdir -p "$RUNS_DIR"
 
-# Strip the leading "_comment" key, then iterate the tasks array.
-# We avoid jq as a dependency — node is already on every dev box
-# we expect to run this on.
 read_tasks() {
     node -e '
         const t = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
         for (const x of t.tasks) console.log(`${x.id}\t${x.question}`);
     ' "$TASKS_FILE"
+}
+
+# Reset the kubernetes clone to a known clean state. We deliberately
+# do NOT use `git clean -fd` here — anything untracked in $KUBE_DIR
+# (notably .vectra/) must survive between tasks.
+reset_clone() {
+    git -C "$KUBE_DIR" reset --hard HEAD >/dev/null 2>&1
+    git -C "$KUBE_DIR" checkout -- . >/dev/null 2>&1 || true
+}
+
+# Capture what changed in the working tree as a unified diff. We do
+# not commit; the next reset_clone will throw it away. The diff is
+# the single artifact a human reads to judge "did the edit do what
+# was asked".
+capture_diff() {
+    git -C "$KUBE_DIR" diff --no-color -- . > "$1" 2>/dev/null || true
 }
 
 run_one() {
@@ -111,40 +99,42 @@ run_one() {
 
     local v_elapsed c_elapsed
 
-    # ---- Vectra path (skip if NDJSON already there — idempotent rerun) ----
+    # ---- Vectra path ----
     if [ -s "$out_dir/vectra.ndjson" ] && [ -f "$out_dir/vectra.elapsed" ]; then
         v_elapsed=$(cat "$out_dir/vectra.elapsed")
         echo "  · vectra ask …  (cached, ${v_elapsed}s)"
     else
-        echo "  · vectra ask … [config=$CONFIG]"
+        echo "  · vectra ask … [config=$CONFIG, edit mode]"
+        reset_clone
         local v_start=$EPOCHREALTIME
         (
             cd "$KUBE_DIR"
             vectra ask "$question" \
                 "${VECTRA_RETRIEVAL_FLAGS[@]}" \
-                --stream-json --permission-mode plan \
+                --stream-json --permission-mode bypassPermissions \
                 </dev/null \
                 > "$out_dir/vectra.ndjson" 2> "$out_dir/vectra.stderr"
         ) || true
         local v_end=$EPOCHREALTIME
         v_elapsed=$(awk -v s="$v_start" -v e="$v_end" 'BEGIN { printf "%.2f", e - s }')
         echo "$v_elapsed" > "$out_dir/vectra.elapsed"
+        capture_diff "$out_dir/vectra.diff"
     fi
 
-    # ---- Claude-only path: reuse from baseline if available ----
+    # ---- Claude-only path: reuse from baseline if already run ----
     if [ -s "$out_dir/claude.ndjson" ] && [ -f "$out_dir/claude.elapsed" ]; then
         c_elapsed=$(cat "$out_dir/claude.elapsed")
         echo "  · claude -p …  (cached, ${c_elapsed}s)"
     elif [ "$CONFIG" != "symbol-only" ] && [ -s "$BASELINE_RUNS_DIR/$id/claude.ndjson" ]; then
-        # Claude-alone is identical across vectra configs — reuse the
-        # baseline rather than spending tokens on it again.
         cp "$BASELINE_RUNS_DIR/$id/claude.ndjson" "$out_dir/claude.ndjson"
         cp "$BASELINE_RUNS_DIR/$id/claude.stderr" "$out_dir/claude.stderr" 2>/dev/null || true
         cp "$BASELINE_RUNS_DIR/$id/claude.elapsed" "$out_dir/claude.elapsed" 2>/dev/null || true
+        cp "$BASELINE_RUNS_DIR/$id/claude.diff" "$out_dir/claude.diff" 2>/dev/null || true
         c_elapsed=$(cat "$out_dir/claude.elapsed")
         echo "  · claude -p …  (reused from baseline, ${c_elapsed}s)"
     else
-        echo "  · claude -p …"
+        echo "  · claude -p … [edit mode]"
+        reset_clone
         local c_start=$EPOCHREALTIME
         (
             cd "$KUBE_DIR"
@@ -152,20 +142,24 @@ run_one() {
                 --output-format=stream-json \
                 --include-partial-messages \
                 --verbose \
-                --permission-mode plan \
+                --permission-mode bypassPermissions \
                 </dev/null \
                 > "$out_dir/claude.ndjson" 2> "$out_dir/claude.stderr"
         ) || true
         local c_end=$EPOCHREALTIME
         c_elapsed=$(awk -v s="$c_start" -v e="$c_end" 'BEGIN { printf "%.2f", e - s }')
         echo "$c_elapsed" > "$out_dir/claude.elapsed"
+        capture_diff "$out_dir/claude.diff"
     fi
+
+    # Always end on a clean tree for the next task.
+    reset_clone
 
     # ---- Extract human-readable answer ----
     extract_text "$out_dir/vectra.ndjson" > "$out_dir/vectra.txt"
     extract_text "$out_dir/claude.ndjson" > "$out_dir/claude.txt"
 
-    # ---- Extract result event (final usage / cost) ----
+    # ---- Extract result event ----
     local v_meta c_meta
     v_meta=$(extract_result "$out_dir/vectra.ndjson")
     c_meta=$(extract_result "$out_dir/claude.ndjson")
@@ -176,9 +170,10 @@ run_one() {
         const cMeta = process.argv[3] ? JSON.parse(process.argv[3]) : null;
         const meta = {
             id,
+            mode: "edit",
             config: process.argv[7],
-            vectra:   { wall_seconds: parseFloat(process.argv[4]), result: vMeta },
-            claude:   { wall_seconds: parseFloat(process.argv[5]), result: cMeta },
+            vectra: { wall_seconds: parseFloat(process.argv[4]), result: vMeta },
+            claude: { wall_seconds: parseFloat(process.argv[5]), result: cMeta },
         };
         require("fs").writeFileSync(process.argv[6], JSON.stringify(meta, null, 2));
     ' "$id" "$v_meta" "$c_meta" "$v_elapsed" "$c_elapsed" "$out_dir/meta.json" "$CONFIG"
@@ -186,9 +181,6 @@ run_one() {
     echo "  · wrote $out_dir/  (vectra ${v_elapsed}s, claude ${c_elapsed}s)"
 }
 
-# Pull the assistant message out of an NDJSON stream by concatenating
-# every text_delta in the canonical 'assistant' message events. We
-# read the final assistant block which holds the full reply.
 extract_text() {
     local f="$1"
     node -e '
@@ -232,11 +224,21 @@ extract_result() {
 }
 
 # ---- main ----
-echo "POC harness — kubernetes clone at $KUBE_DIR"
+echo "Edit-POC harness — kubernetes clone at $KUBE_DIR"
 echo "config: $CONFIG  ·  tasks: $(basename "$TASKS_FILE")  ·  output: $RUNS_DIR"
 echo
 
-# Read tasks line-by-line (id<TAB>question).
+# Confirm the working tree is clean before starting; otherwise the
+# first reset_clone might wipe legitimate user work. We deliberately
+# pass --untracked-files=no — `.vectra/` is always present in an
+# indexed clone and counts as untracked, but it is the harness's
+# own state and must not block the run.
+if [ -n "$(git -C "$KUBE_DIR" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    echo "error: $KUBE_DIR has uncommitted tracked changes — clean it before running" >&2
+    git -C "$KUBE_DIR" status --short --untracked-files=no >&2
+    exit 1
+fi
+
 while IFS=$'\t' read -r id question; do
     [ -z "$id" ] && continue
     run_one "$id" "$question"

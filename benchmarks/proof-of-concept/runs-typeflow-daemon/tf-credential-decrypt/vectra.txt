@@ -1,0 +1,20 @@
+## How typeflow fetches & decrypts per-org API keys for the AI Flow Builder
+
+**Flow** (see `server/services/ai/agent-executor.ts:118-141`, function `getApiKey`):
+
+1. Receives `organizationId` and `credentialId` from the executing node.
+2. Queries the `credentials` table via Drizzle, filtered by **both** `id = credentialId` AND `organizationId = organizationId` — so an org can only ever decrypt its own credentials (`server/services/ai/agent-executor.ts:128-133`).
+3. Throws `Credential not found` if no row matches.
+4. Passes the row's encrypted `config` string into the decryption helper, typed as `{ apiKey: string; baseUrl?: string }`, and returns `{ apiKey, baseUrl }` to the caller (which then constructs the OpenAI/Anthropic SDK client).
+
+**Helper that decrypts the credential payload:**
+
+> **`decryptObject`** — imported from `@/lib/encryption` (`server/services/ai/agent-executor.ts:122`).
+
+Used as: `decryptObject<{ apiKey: string; baseUrl?: string }>(cred.config as string)` (`agent-executor.ts:139`).
+
+The same helper is used by the text-classifier path (`server/services/ai/text-classifier-executor.ts:29, 38`), confirming it's the single decryption entry point for stored credential blobs across the AI executors.
+
+---
+
+This was a research question, not an implementation request — no plan file is needed. Let me know if you'd like me to dig into `lib/encryption.ts` itself (e.g. cipher, key source, IV handling), or trace how `credentialId` gets onto a node in the first place.

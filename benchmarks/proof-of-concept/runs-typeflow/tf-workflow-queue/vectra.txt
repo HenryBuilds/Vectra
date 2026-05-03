@@ -1,0 +1,8 @@
+Workflow executions are dispatched in `lib/queue/workflow-queue.ts`:
+
+- **Add a job**: `addWorkflowJob` (lib/queue/workflow-queue.ts:43) — calls `queue.add("execute-workflow", data, ...)`.
+- **Singleton Queue**: `getWorkflowQueue` (lib/queue/workflow-queue.ts:9) — lazily constructs and caches a `Queue<WorkflowJobData, WorkflowJobResult>` using `getRedisConnection()`.
+
+`addWorkflowJob` calls `getWorkflowQueue()` to obtain the shared instance, then enqueues the job under the name `"execute-workflow"`.
+
+This was a read-only question — no plan is needed. Let me know if you want me to trace the callers of `addWorkflowJob` (e.g., the API route that triggers a run) or sketch a plan for a change.

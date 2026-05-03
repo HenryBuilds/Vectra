@@ -1,0 +1,20 @@
+I have the answer. This is a factual research question, not a change to plan, so I'll write a short answer document and exit plan mode.
+**Procedure builder: `organizationProcedure`** — defined in `server/trpc.ts`.
+
+Three builders are exported:
+
+| Builder | Enforces |
+|---|---|
+| `publicProcedure` | nothing |
+| `protectedProcedure` | authenticated user — throws `UNAUTHORIZED` if `ctx.userId` is null |
+| `organizationProcedure` | extends `protectedProcedure`, requires an `organizationId` input, and verifies membership — throws `FORBIDDEN` if the caller isn't in `organizationMembers` |
+
+How it's wired:
+
+1. `server/context.ts` reads the auth token, calls `verifyToken`, and attaches `userId` (or `null`) to `ctx`.
+2. `protectedProcedure` chains `rateLimitMiddleware` then a middleware that throws `TRPCError({ code: "UNAUTHORIZED" })` when `ctx.userId` is missing.
+3. `organizationProcedure` adds `.input(z.object({ organizationId: z.string().uuid() }))` plus a middleware that queries `organizationMembers` for `(input.organizationId, ctx.userId)`. No row → `FORBIDDEN`. Match → `organization` and `membership` are added to `ctx` for the resolver.
+
+Usage in routers:
+- `server/routers/organizations.ts` uses `protectedProcedure` for the org-list/create/lookup endpoints (the org id isn't known yet).
+- `server/routers/workflows.ts` and the other per-org routers use `organizationProcedure` for every endpoint.

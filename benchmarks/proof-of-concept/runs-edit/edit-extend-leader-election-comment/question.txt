@@ -1,0 +1,1 @@
+In `cmd/kube-controller-manager/app/controllermanager.go`, find the function `leaderElectAndRun` and add a doc comment immediately above its declaration. The comment must say: `// leaderElectAndRun runs the controller manager under a Lease-based leader election.` Replace any existing single-line doc comment on that declaration; do not add a duplicate.

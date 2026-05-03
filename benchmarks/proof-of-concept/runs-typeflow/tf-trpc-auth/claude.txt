@@ -1,0 +1,20 @@
+This is a Q&A question, not an implementation request — there's nothing to plan or build. Here's the answer:
+
+**Authentication and org-scoping in typeflow's tRPC stack** (`server/trpc.ts:1-89`):
+
+Three procedure builders are exported, layered on top of each other:
+
+1. **`publicProcedure`** (line 11) — bare `t.procedure`, no auth.
+2. **`protectedProcedure`** (line 27) — adds two middlewares:
+   - `rateLimitMiddleware` (per `ctx.clientIp`, via `apiRateLimiter`)
+   - An auth guard that throws `UNAUTHORIZED` if `ctx.userId` is missing, then narrows `userId` to non-null in the downstream context.
+3. **`organizationProcedure`** (line 47) — extends `protectedProcedure` and is **the builder used for protected, organization-scoped endpoints**. It:
+   - Requires an `organizationId: z.string().uuid()` on every input,
+   - Loads the org from `db.query.organizations` (404s with `NOT_FOUND` if missing),
+   - Verifies `organizationMembers` has a row matching `(organizationId, ctx.userId)` (403s with `FORBIDDEN` otherwise),
+   - Injects the resolved `organization` and `membership` rows into `ctx` for downstream resolvers.
+
+So the answer to "name the procedure builder" is **`organizationProcedure`**, exported from `server/trpc.ts:47`. Caller context comes from `server/context.ts` (where `ctx.userId` and `ctx.clientIp` are populated), and 16 routers consume these builders (e.g., `server/routers/workflows.ts`, `credentials.ts`, `organizations.ts`, etc.).
+Answer already provided above — `organizationProcedure` (defined at `server/trpc.ts:47`) is the builder for protected, organization-scoped endpoints. It composes onto `protectedProcedure`, which itself layers rate limiting + a `ctx.userId` auth check on the base `publicProcedure`.
+
+Since this was a research/Q&A request rather than an implementation task, no plan file or `ExitPlanMode` call is needed (per the tool's own guidance for research questions).

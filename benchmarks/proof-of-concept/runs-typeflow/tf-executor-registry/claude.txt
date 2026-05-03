@@ -1,0 +1,13 @@
+The answer:
+
+- **File**: `server/services/executor-registry.ts`
+- **Registry class**: `ExecutorRegistry` (instantiated as the singleton `executorRegistry`)
+- **Registration methods**: three of them, each backed by a separate map/set:
+  - `register(nodeType, executor)` — standard executors (stored in `executors: Map<string, NodeExecutor>`)
+  - `registerConditional(nodeType, executor)` — conditional/multi-output executors like `if` and `switch` (stored in `conditionalExecutors: Map<string, ConditionalNodeExecutor>`)
+  - `registerPassThrough(nodeType)` — types that emit input unchanged (e.g. `trigger`, `webhook`, `manualTrigger`; stored in `passThroughTypes: Set<string>`)
+
+Lookups go through `get`, `getConditional`, `isPassThrough`, and `has`. All built-in executors are registered at module load time at the bottom of the file (lines 132–323).
+
+Since this was a research question with no implementation requested, I'll write a minimal plan noting no changes are needed and exit plan mode.
+This was a research question, so per the `ExitPlanMode` guidance ("do NOT use this tool" for research/file-reading tasks) I won't call it. The answer is in my prior message and mirrored in the plan file at `~/.claude/plans/how-does-typeflow-s-executor-agile-sketch.md` for reference. Nothing to implement.

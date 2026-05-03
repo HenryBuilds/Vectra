@@ -1,0 +1,8 @@
+I have a complete picture from reading `lib/encryption.ts`, `lib/env.ts`, and tracing the call sites. This is a research question rather than an implementation task — I'll write the findings to the plan file and exit plan mode.
+This is a research question, so per ExitPlanMode's own guidance ("do NOT use this tool" for research / understanding the codebase) I'll just answer directly. Findings are also written to the plan file for reference.
+
+**Where:** All credential encryption goes through `lib/encryption.ts`. User-supplied credential payloads are encrypted at the tRPC write boundary in `server/routers/credentials.ts:151` (create) and `server/routers/credentials.ts:217` (update) via `encryptObject(input.config)`, and decrypted at use sites like `server/services/ai/agent-executor.ts:140` and `server/services/ai/text-classifier-executor.ts:38`.
+
+**Algorithm:** `AES-256-GCM` (`lib/encryption.ts:16`). Each blob gets a fresh 16-byte random IV, and the 16-byte GCM auth tag is verified on decrypt. Stored format is `iv:authTag:ciphertext` in hex.
+
+**Key:** `getEncryptionKey()` in `lib/encryption.ts:5–14` reads `env.ENCRYPTION_KEY` (Zod-required at startup, `lib/env.ts:23`). If the value is 64 hex chars it's decoded as the raw 32-byte key; otherwise it's run through SHA-256 to derive 32 bytes. The var is operator-supplied via `.env` (`.env.example:12`, `README.md:11`) — there is no KMS, no key versioning, and no rotation mechanism in the codebase, so the docs page line about keys being "rotated regularly" (`app/docs/credentials/page.tsx:175`) overstates reality. Also note: no AAD is bound into the GCM tag, so ciphertext blobs aren't tied to a specific row at the crypto layer.

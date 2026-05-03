@@ -1,0 +1,1 @@
+Added the klog.V(5) log line as the first statement in `rankMemoryPressure`. The `k8s.io/klog/v2` import was already present (line 32) and remains valid since `klog` is now actively used in the function.

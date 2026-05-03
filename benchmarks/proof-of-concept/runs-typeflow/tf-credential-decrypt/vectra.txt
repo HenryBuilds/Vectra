@@ -1,0 +1,9 @@
+The AI Flow Builder fetches and decrypts per-org API keys via `getApiKey` in `server/services/ai/agent-executor.ts:118`:
+
+1. **Tenant-scoped lookup** — queries the `credentials` table with `and(eq(credentials.id, credentialId), eq(credentials.organizationId, organizationId))`, so a credential row only resolves when both IDs match (prevents cross-org access).
+2. **Decrypt the config blob** — calls `decryptObject<{ apiKey: string; baseUrl?: string }>(cred.config)` from `lib/encryption.ts`.
+3. **Return** `{ apiKey, baseUrl }` to the executor, which hands it to the OpenAI/Anthropic SDK client.
+
+**Helper function:** `decryptObject` (`lib/encryption.ts:71`) — a thin generic wrapper that calls `decrypt` (`lib/encryption.ts:40`) and `JSON.parse`s the result. `decrypt` itself does AES-GCM decryption: splits the stored `iv:authTag:ciphertext` triple, builds a decipher with `crypto.createDecipheriv(ALGORITHM, key, iv)`, sets the auth tag, and returns the plaintext.
+
+So the short answer: **`decryptObject`** (backed by `decrypt`) in `lib/encryption.ts`.

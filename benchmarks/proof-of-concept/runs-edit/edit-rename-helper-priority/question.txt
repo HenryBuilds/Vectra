@@ -1,0 +1,1 @@
+In `pkg/scheduler/framework/plugins/defaultpreemption/default_preemption.go`, find the unexported helper named `isPreemptionAllowed` and rename it to `isVictimEligibleForPreemption` everywhere it is defined or called *within that single file*. Do not modify any other files.

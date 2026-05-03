@@ -1,0 +1,5 @@
+project: C:\Users\German Classic\Desktop\typeflow
+daemon:  http://127.0.0.1:7777 (no in-process index/embedder)
+context: 8 chunks retrieved [daemon 54 ms]
+
+--- claude ---

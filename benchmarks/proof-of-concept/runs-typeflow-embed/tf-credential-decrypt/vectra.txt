@@ -1,0 +1,14 @@
+I have enough context to answer directly. Let me write a brief plan file documenting the findings, then exit plan mode.
+## Answer
+
+The helper is **`decryptObject<T>()`**, defined in `lib/encryption.ts:71-73`. It wraps `decrypt()` (AES-256-GCM with `iv:authTag:ciphertext` hex format, key from `env.ENCRYPTION_KEY`) and `JSON.parse`s the plaintext into a typed config.
+
+Flow when the AI Flow Builder needs to call OpenAI/Anthropic:
+
+1. `getApiKey(organizationId, credentialId, provider)` at `server/services/ai/agent-executor.ts:118-141` runs.
+2. It queries `db.credentials` filtered by **both** `credentials.id = credentialId` **and** `credentials.organizationId = organizationId` (tenant isolation).
+3. The encrypted blob is in `cred.config` and is decrypted with `decryptObject<{ apiKey: string; baseUrl?: string }>(cred.config as string)` (imported from `@/lib/encryption`).
+4. `{ apiKey, baseUrl }` is then handed to the provider SDK (`createOpenAI` / `createAnthropic` / etc.).
+
+The text-classifier node (`server/services/ai/text-classifier-executor.ts:25-51`) uses the same `decryptObject` helper.
+This was a research question rather than an implementation task, so per `ExitPlanMode`'s own guidance ("For research tasks where you're gathering information... do NOT use this tool") I'll stop here. The answer above is complete: the helper is `decryptObject` in `lib/encryption.ts:71`, called from `getApiKey` in `server/services/ai/agent-executor.ts:118-141` after a tenant-scoped lookup against the `credentials` table.

@@ -1,0 +1,24 @@
+I'll verify the helper exists and understand its full behavior, then answer.
+The answer is fully visible in the codebase. Let me record the findings in the plan file.
+**Helper:** `decryptObject<T>()` — defined in `lib/encryption.ts:71`.
+
+```ts
+export function decryptObject<T>(encryptedText: string): T {
+  return JSON.parse(decrypt(encryptedText)) as T;
+}
+```
+
+It wraps `decrypt()` (AES-256-GCM, key from `env.ENCRYPTION_KEY`, format `iv:authTag:ciphertext` in hex) and JSON-parses the plaintext into a typed object.
+
+**Fetch + decrypt flow** (when an AI node runs):
+
+1. Drizzle query against `credentials`, scoped by **both** `id` and `organizationId` so cross-org access is impossible at the query level.
+2. `cred.config` is the encrypted blob produced by `encrypt()`/`encryptObject()` at write time.
+3. `decryptObject<{ apiKey: string; baseUrl?: string }>(cred.config)` returns the plaintext config.
+4. `apiKey` / `baseUrl` are handed to the provider SDK (`createOpenAI`, `createAnthropic`, `createGoogleGenerativeAI`, …).
+
+**Call sites in the AI Flow Builder:**
+- `server/services/ai/agent-executor.ts:118` — `getApiKey(organizationId, credentialId, _provider)` (AI Agent node + its chat model / tools / memory sub-nodes).
+- `server/services/ai/text-classifier-executor.ts:25` — `getApiKeyAndModel(organizationId, config)` (Text Classifier node).
+
+Both bypass the higher-level `OpenAICredential` / `AnthropicCredential` wrappers in `server/services/credential-service.ts` and decrypt inline. Note: `apiKey` may legitimately be empty for self-hosted providers like Ollama (`agent-executor.ts:119-120`).

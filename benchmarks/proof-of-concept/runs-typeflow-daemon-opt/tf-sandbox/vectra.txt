@@ -1,0 +1,5 @@
+- **File:** `server/services/sandbox.ts`
+- **Entry function:** `executeInSandbox` (lines 289–302)
+- **Isolation primitive:** Node.js built-in `vm` module — specifically `new vm.Script(code, { filename: "user-code.js" })` followed by `script.runInContext(context, { timeout, breakOnSigint: true })`
+
+The function compiles the user-supplied code into a `vm.Script` and runs it against a pre-built `vm.Context`, with a 5 s default timeout and SIGINT break enabled.

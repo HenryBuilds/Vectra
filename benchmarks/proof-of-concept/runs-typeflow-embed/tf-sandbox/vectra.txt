@@ -1,0 +1,20 @@
+This is a factual question with no implementation needed, so there's nothing to plan or build.
+
+**Answer:**
+
+- **File:** `server/services/sandbox.ts`
+- **Entry function:** `executeInSandbox` (`server/services/sandbox.ts:289`) — it compiles the user code into a `vm.Script` (filename `"user-code.js"`) and invokes `script.runInContext(context, { timeout, breakOnSigint: true })`.
+- **Underlying isolation primitive:** Node.js's built-in **`vm` module** — specifically `vm.Script` + `runInContext` against a locked-down `vm.Context` (built by `createSandboxContext`) that blocks dangerous modules (`child_process`, `fs`, `net`, `process`, etc., including `node:` prefixed variants).
+
+Caveat documented in the file header (`sandbox.ts:8-10`): Node's `vm` is not a true security boundary; for untrusted multi-tenant use the comment recommends `isolated-vm` or Docker. The sandbox blocks common escape vectors but isn't a hard isolate.
+
+Exiting plan mode since no changes are required.
+Per the ExitPlanMode tool's own guidance, it's only for planning code-implementation tasks — not for research/Q&A. So I'll skip it: my answer above is the response.
+
+**Summary**
+
+- File: `server/services/sandbox.ts`
+- Entry function: `executeInSandbox` (line 289)
+- Isolation primitive: Node.js built-in **`vm` module** — `vm.Script` compiled with filename `"user-code.js"`, then run via `script.runInContext(context, { timeout, breakOnSigint: true })` against a locked-down `vm.Context` that blocks `child_process`, `fs`, `net`, `process`, and other dangerous modules (including `node:` prefixed variants).
+
+The file header (`sandbox.ts:8-10`) explicitly notes Node's `vm` isn't a true security boundary and recommends `isolated-vm` or Docker for untrusted multi-tenant use.

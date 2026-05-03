@@ -1,0 +1,1 @@
+Added the `klog.V(5).InfoS` line as the first statement in `rankMemoryPressure` at pkg/kubelet/eviction/helpers.go:820. The existing `k8s.io/klog/v2` import (line 32) remains valid and is now exercised by this call.

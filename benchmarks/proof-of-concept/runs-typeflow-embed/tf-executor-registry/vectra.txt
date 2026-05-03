@@ -1,0 +1,14 @@
+I'll read the executor-registry file to confirm the full picture before answering, since the context shows snippets but I want to verify what's actually wired up.
+This is a factual question with a clear answer from the code. Writing a brief plan file with the findings.
+This is a research question, so I'll answer directly rather than exit plan mode (per the tool's own guidance).
+
+- **File:** `server/services/executor-registry.ts`
+- **Class:** `ExecutorRegistry` (defined at line 52, exported as the singleton `executorRegistry` at line 86)
+- **Registration methods (three, by node shape):**
+  - `register(nodeType, executor)` — line 57 — normal data-producing nodes (`filter`, `httpRequest`, `postgres`, `openai`, `aiAgent`, `code`, …); stored in `Map<string, NodeExecutor>`
+  - `registerConditional(nodeType, executor)` — line 61 — branching nodes (`if`, `switch`) that route to multiple outputs
+  - `registerPassThrough(nodeType)` — line 65 — trigger/no-op types whose output equals input (`trigger`, `webhook`, `noop`, `manualTrigger`, `scheduleTrigger`, `chatTrigger`, `workflowTrigger`)
+
+Lookup is via `get` / `getConditional` / `isPassThrough` / `has`.
+
+**Worth flagging:** the file's header bills itself as a replacement for "the monolithic if/else chain in workflow-executor.ts," but `server/services/workflow-executor.ts` still dispatches via that long if/else cascade across `executeUntilNode`, `executeWorkflow`, and `executeWithDebug`. The registry is built and exported but not consumed by `WorkflowExecutor` — the migration appears incomplete.

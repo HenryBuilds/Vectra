@@ -1,0 +1,1 @@
+Added the comment immediately above the `func GetPodQOS` declaration at pkg/apis/core/helper/qos/qos.go:37. The two pre-existing doc comments above it were left in place as the task only asked to add a new line.

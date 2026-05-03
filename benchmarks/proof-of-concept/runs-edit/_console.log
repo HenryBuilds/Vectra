@@ -1,0 +1,30 @@
+Edit-POC harness — kubernetes clone at c:/Users/German Classic/Desktop/kubernetes
+config: symbol-only  ·  tasks: tasks-edit.json  ·  output: /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-edit
+
+
+=== [edit-add-comment-getpodqos] In the Kubernetes source under `pkg/apis/core/helper/qos/qos.go`, add a single-line comment immediately above the `GetPodQOS` function declaration that says: `// GetPodQOS classifies a pod into Guaranteed, Burstable, or BestEffort.`
+  · vectra ask … [config=symbol-only, edit mode]
+  · claude -p … [edit mode]
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-edit/edit-add-comment-getpodqos/  (vectra 14.76s, claude 10.72s)
+
+=== [edit-rename-helper-priority] In `pkg/scheduler/framework/plugins/defaultpreemption/default_preemption.go`, find the unexported helper named `isPreemptionAllowed` and rename it to `isVictimEligibleForPreemption` everywhere it is defined or called *within that single file*. Do not modify any other files.
+  · vectra ask … [config=symbol-only, edit mode]
+  · claude -p … [edit mode]
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-edit/edit-rename-helper-priority/  (vectra 15.61s, claude 18.07s)
+
+=== [edit-add-log-rankmemory] In `pkg/kubelet/eviction/helpers.go`, add a single `klog.V(5).InfoS("rankMemoryPressure: ranking pods", "count", len(pods))` line as the very first statement inside the body of `rankMemoryPressure`. Do not modify any other function. Make sure the existing `k8s.io/klog/v2` import stays valid.
+  · vectra ask … [config=symbol-only, edit mode]
+  · claude -p … [edit mode]
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-edit/edit-add-log-rankmemory/  (vectra 14.18s, claude 17.96s)
+
+=== [edit-extend-leader-election-comment] In `cmd/kube-controller-manager/app/controllermanager.go`, find the function `leaderElectAndRun` and add a doc comment immediately above its declaration. The comment must say: `// leaderElectAndRun runs the controller manager under a Lease-based leader election.` Replace any existing single-line doc comment on that declaration; do not add a duplicate.
+  · vectra ask … [config=symbol-only, edit mode]
+  · claude -p … [edit mode]
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-edit/edit-extend-leader-election-comment/  (vectra 42.82s, claude 13.43s)
+
+=== [edit-add-helper-pdb-eviction] In `pkg/registry/core/pod/storage/eviction.go`, add a small unexported helper function named `pdbAllowsEviction` immediately above `checkAndDecrement`. The helper takes a single `*policyv1.PodDisruptionBudget` argument and returns `b.Status.DisruptionsAllowed > 0`. Do not modify any other function in the file, and do not change any imports.
+  · vectra ask … [config=symbol-only, edit mode]
+  · claude -p … [edit mode]
+  · wrote /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-edit/edit-add-helper-pdb-eviction/  (vectra 14.46s, claude 13.63s)
+
+All tasks complete. Outputs in /c/Users/German Classic/Desktop/Vectra/benchmarks/proof-of-concept/runs-edit

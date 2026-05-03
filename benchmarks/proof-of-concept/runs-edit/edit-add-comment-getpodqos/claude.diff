@@ -1,0 +1,12 @@
+diff --git a/pkg/apis/core/helper/qos/qos.go b/pkg/apis/core/helper/qos/qos.go
+index 4f81d646..60b31aad 100644
+--- a/pkg/apis/core/helper/qos/qos.go
++++ b/pkg/apis/core/helper/qos/qos.go
+@@ -34,6 +34,7 @@ func isSupportedQoSComputeResource(name core.ResourceName) bool {
+ 
+ // GetPodQOS returns the QoS class of a pod persisted in the PodStatus.QOSClass field.
+ // If PodStatus.QOSClass is empty, it returns value of ComputePodQOS() which evaluates pod's QoS class.
++// GetPodQOS classifies a pod into Guaranteed, Burstable, or BestEffort.
+ func GetPodQOS(pod *core.Pod) core.PodQOSClass {
+ 	if pod.Status.QOSClass != "" {
+ 		return pod.Status.QOSClass

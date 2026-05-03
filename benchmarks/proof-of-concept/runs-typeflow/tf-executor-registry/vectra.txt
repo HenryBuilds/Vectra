@@ -1,0 +1,20 @@
+The answer is directly visible in the pre-fetched context — no exploration or planning needed.
+
+**File:** `server/services/executor-registry.ts`
+**Class:** `ExecutorRegistry` (lines 52-84)
+**Registration method:** `register(nodeType: string, executor: NodeExecutor): void`
+
+The registry maps node types to executors using an internal `Map<string, NodeExecutor>` called `executors`. The `register` method stores an executor under its `nodeType` key (`this.executors.set(nodeType, executor)`), and `get(nodeType)` retrieves it later.
+
+It also has two sibling registration methods for special cases:
+- `registerConditional(nodeType, executor)` — for branching nodes (IF/Switch) that route items to multiple outputs
+- `registerPassThrough(nodeType)` — for sub-node types that carry config but don't execute
+
+Note: the class exists, but `server/services/workflow-executor.ts` doesn't actually use it — `WorkflowExecutor` still dispatches via a long `if (currentNode.type === "...")` chain. So the registry appears to be infrastructure not yet wired into the main executor.
+
+Since this is a read-only Q&A and no plan is needed, I'll exit plan mode without writing a plan file.
+This was a research question, not an implementation task, so per the ExitPlanMode tool's own guidance ("For research tasks where you're gathering information... do NOT use this tool"), I won't call it. The answer above stands:
+
+- **File:** `server/services/executor-registry.ts`
+- **Class:** `ExecutorRegistry`
+- **Method:** `register(nodeType, executor)` — backed by an internal `Map<string, NodeExecutor>`

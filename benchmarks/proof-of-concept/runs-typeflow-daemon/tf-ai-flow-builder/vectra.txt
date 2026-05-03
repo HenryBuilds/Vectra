@@ -1,0 +1,13 @@
+**File:** `server/routers/ai-flow-builder.ts` (the tRPC router; the chat UI lives in `components/ai-flow-builder-panel.tsx` and calls `trpc.aiFlowBuilder.generateFlow`).
+
+**Supported providers:** OpenAI, Anthropic, and Google (Gemini) — picked in that priority order from the organization's stored credentials by `getModelForGeneration` (`server/routers/ai-flow-builder.ts:87-109`). Default models per provider:
+- OpenAI → `gpt-4o-mini`
+- Anthropic → `claude-sonnet-4-20250514`
+- Google → `gemini-2.0-flash`
+
+The generation itself uses the Vercel AI SDK's `generateText` with a system prompt that enumerates all available node types, then parses the model's JSON response into nodes + connections.
+Per the ExitPlanMode tool description: "For research tasks where you're gathering information, searching files, reading files or in general trying to understand the codebase - do NOT use this tool." This was a research question, so I'll leave the answer in chat (and in the plan file for reference) without exiting plan mode.
+
+**Summary**
+- **File:** `server/routers/ai-flow-builder.ts` (UI: `components/ai-flow-builder-panel.tsx`).
+- **Providers:** OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-20250514`), Google (`gemini-2.0-flash`) — selected in that order from the org's saved credentials by `getModelForGeneration` at lines 87-109.

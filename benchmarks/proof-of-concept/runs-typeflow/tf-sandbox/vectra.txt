@@ -1,0 +1,11 @@
+Found everything from the code I read. Writing this up as a brief answer in the plan file since plan mode requires it.
+**Answer:**
+
+- **File**: `server/services/sandbox.ts`
+- **Entry function**: `executeInSandbox` (`server/services/sandbox.ts:289`), called from `executeCodeNode` in `server/services/code-executor.ts:140`
+- **Isolation primitive**: Node.js's built-in **`vm` module** — `new vm.Script(code).runInContext(context, { timeout: 5000, breakOnSigint: true })`, where `context` is a `vm.Context` produced by `createSandboxContext` (`sandbox.ts:178`)
+
+Worth flagging: the file's own header comment (`sandbox.ts:9`) notes Node's `vm` is **not a security boundary** for untrusted users and recommends `isolated-vm` or Docker for that case.
+The ExitPlanMode docstring explicitly says not to use it for research tasks — and this was a Q&A, not an implementation. The answer is in my reply above; nothing to implement, so there's nothing to approve.
+
+Summary: typeflow runs user JS via Node's built-in `vm` module. Entry function `executeInSandbox` at `server/services/sandbox.ts:289` runs `new vm.Script(code).runInContext(ctx, { timeout: 5000 })` against a `vm.Context` from `createSandboxContext` (`sandbox.ts:178`), invoked by `executeCodeNode` at `server/services/code-executor.ts:140`. Note: `sandbox.ts:9` warns this is not a security boundary.

@@ -1,0 +1,4 @@
+The existing doc comment block has two lines (description + TODO). I'll replace it with the single specified line.
+Replaced the existing two-line doc comment (description + TODO) on `leaderElectAndRun` at `cmd/kube-controller-manager/app/controllermanager.go:838` with the specified single-line doc comment, which now sits immediately above the declaration.
+
+Note: the same-named `leaderElectAndRun` exists in `staging/src/k8s.io/cloud-provider/app/controllermanager.go` and `test/e2e/apimachinery/coordinatedleaderelection.go` — I left those untouched since the task scoped to the kube-controller-manager file. Let me know if you want them updated too.

@@ -1,0 +1,14 @@
+project: C:\Users\German Classic\Desktop\typeflow
+index:   C:\Users\German Classic\Desktop\typeflow\.vectra\index.db
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 12226 MiB):
+  Device 0: NVIDIA GeForce RTX 5070, compute capability 12.0, VMM: yes, VRAM: 12226 MiB
+model:   qwen3-embed-0.6b (dim 1024)
+retrieval pipeline:
+  [    2 ms] symbol search (FTS5)      (50 items)
+  [ 1905 ms] embed query               (1024 items)
+  [    0 ms] vector search (HNSW)      (50 items)
+  [    0 ms] RRF fusion                (8 items)
+  [    0 ms] materialize chunks        (8 items)
+context: 8 chunks retrieved [total 1908 ms]
+
+--- claude ---

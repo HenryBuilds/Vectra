@@ -1,0 +1,11 @@
+Found it. Let me write the answer to the plan file.
+**File:** `server/routers/ai-flow-builder.ts` — the `aiFlowBuilderRouter.generateFlow` mutation. It's invoked from the UI in `components/ai-flow-builder-panel.tsx` and uses the Vercel AI SDK's `generateText` with a system prompt that enumerates every node type, then parses the model's JSON response into `{ nodes, connections, description }`.
+
+**Providers** (picked in this order from the org's stored credentials, in `getModelForGeneration`, lines 87–109):
+
+1. **OpenAI** — `gpt-4o-mini` via `@ai-sdk/openai`
+2. **Anthropic** — `claude-sonnet-4-20250514` via `@ai-sdk/anthropic`
+3. **Google** — `gemini-2.0-flash` via `@ai-sdk/google`
+
+If none of those credentials exist it throws "No AI credentials found…". Note this is just the *builder's* model — the workflows it emits can reference additional providers through `llmChain` / `aiAgent` node configs.
+This was a research question, not an implementation task — per ExitPlanMode's own guidance ("For research tasks where you're gathering information... do NOT use this tool"), I'll leave plan mode unexited. The answer is above, and the findings are also saved to the plan file for reference.

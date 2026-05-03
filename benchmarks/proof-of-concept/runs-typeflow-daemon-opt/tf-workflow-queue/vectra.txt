@@ -1,0 +1,9 @@
+This is a pure information question — the answer is already visible in the provided context, so no implementation plan is needed. Let me write a brief informational plan file and exit.
+**Answer:**
+
+- **File:** `lib/queue/workflow-queue.ts`
+- **Adds a job to the queue:** `addWorkflowJob` (lib/queue/workflow-queue.ts:43) — calls `queue.add("execute-workflow", data, ...)`.
+- **Returns the singleton Queue instance:** `getWorkflowQueue` (lib/queue/workflow-queue.ts:9) — lazily constructs the `Queue<WorkflowJobData, WorkflowJobResult>` with the shared Redis connection from `getRedisConnection()` and caches it in a module-scoped `workflowQueue`.
+
+The worker side consumes these jobs via `processWorkflowJob` in `workers/workflow-worker.ts`.
+The answer above is complete. Per ExitPlanMode's own guidance, it's not used for research/lookup tasks — so I'm leaving the response as the final answer.

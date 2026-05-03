@@ -1,0 +1,12 @@
+diff --git a/pkg/kubelet/eviction/helpers.go b/pkg/kubelet/eviction/helpers.go
+index 6807dd97..5e79bad2 100644
+--- a/pkg/kubelet/eviction/helpers.go
++++ b/pkg/kubelet/eviction/helpers.go
+@@ -817,6 +817,7 @@ func cmpBool(a, b bool) int {
+ // It ranks by whether or not the pod's usage exceeds its requests, then by priority, and
+ // finally by memory usage above requests.
+ func rankMemoryPressure(pods []*v1.Pod, stats statsFunc) {
++	klog.V(5).InfoS("rankMemoryPressure: ranking pods", "count", len(pods))
+ 	orderedBy(exceedMemoryRequests(stats), priority, memory(stats)).Sort(pods)
+ }
+ 

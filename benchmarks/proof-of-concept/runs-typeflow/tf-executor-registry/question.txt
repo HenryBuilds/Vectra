@@ -1,0 +1,1 @@
+How does typeflow's executor registry map workflow node types to their executor functions? Name the file, the registry class, and the registration method.

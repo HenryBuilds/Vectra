@@ -1,0 +1,22 @@
+The answer is right in `server/trpc.ts`. Let me write up the findings and exit plan mode.
+This is a research question, so I'll just answer it directly (no plan file or ExitPlanMode needed — those are for implementation tasks).
+
+## Authentication & organization-scoping in typeflow's tRPC
+
+It's a three-layer stack defined in `server/trpc.ts` and `server/context.ts`:
+
+**1. Context (`server/context.ts:11-29`)** — `createContext()` reads the `token` cookie, calls `verifyToken()` (`lib/jwt.ts`), and exposes `userId: string | null` plus `clientIp` to every procedure. No throw here; unauthenticated requests just get `userId === null`.
+
+**2. `protectedProcedure` (`server/trpc.ts:27-43`)** — `publicProcedure` + two middlewares:
+- `rateLimitMiddleware` (lines 14-25) checks `apiRateLimiter.check(ctx.clientIp)` → `TOO_MANY_REQUESTS` if exceeded.
+- Auth check: throws `TRPCError({ code: "UNAUTHORIZED" })` if `ctx.userId` is falsy, then narrows `userId` to non-null in the downstream context.
+
+**3. `organizationProcedure` (`server/trpc.ts:47-88`)** — **this is the procedure builder for protected, org-scoped endpoints.** It extends `protectedProcedure` and:
+- Forces every input to include `organizationId: z.string().uuid()` via `.input(z.object({ organizationId: ... }))`.
+- Loads the org from `db.query.organizations.findFirst` → `NOT_FOUND` if missing.
+- Loads the caller's `organizationMembers` row (`organizationId` AND `userId`) → `FORBIDDEN` if not a member.
+- Injects `organization` and `membership` into `ctx` for the resolver.
+
+So the answer to your question: **`organizationProcedure`** (exported from `server/trpc.ts`) is the builder used for protected, organization-scoped endpoints. It composes `publicProcedure → rateLimit → auth (protectedProcedure) → org existence + membership check`.
+
+Note: role-level authorization (e.g. only `owner`/`admin` can invite) is *not* baked into `organizationProcedure` — individual routers re-check `membership.role` themselves (see `server/routers/organizations.ts` for the pattern).

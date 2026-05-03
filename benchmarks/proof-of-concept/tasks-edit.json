@@ -1,0 +1,70 @@
+{
+  "_comment": "Edit-style benchmark tasks. Each task asks the assistant to make a small, well-scoped, verifiable code change. The harness git-resets the kubernetes clone before each run so the two pipelines start from the same tree. Verification: after the run, we check (a) the right file was modified (touched_path), and (b) the new content contains the expected anchors (must_contain_after). False-positive resistance comes from anchor specificity — generic strings (`comment`, `field`) would let the wrong file pass; we use distinctive identifiers and short, exact phrases.",
+  "repo": "kubernetes/kubernetes",
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "edit-add-comment-getpodqos",
+      "category": "edit",
+      "question": "In the Kubernetes source under `pkg/apis/core/helper/qos/qos.go`, add a single-line comment immediately above the `GetPodQOS` function declaration that says: `// GetPodQOS classifies a pod into Guaranteed, Burstable, or BestEffort.`",
+      "verify": {
+        "touched_path": "pkg/apis/core/helper/qos/qos.go",
+        "must_contain_after": [
+          "// GetPodQOS classifies a pod into Guaranteed, Burstable, or BestEffort.",
+          "func GetPodQOS"
+        ],
+        "must_not_contain_after": []
+      }
+    },
+    {
+      "id": "edit-rename-helper-priority",
+      "category": "edit",
+      "question": "In `pkg/scheduler/framework/plugins/defaultpreemption/default_preemption.go`, find the unexported helper named `isPreemptionAllowed` and rename it to `isVictimEligibleForPreemption` everywhere it is defined or called *within that single file*. Do not modify any other files.",
+      "verify": {
+        "touched_path": "pkg/scheduler/framework/plugins/defaultpreemption/default_preemption.go",
+        "must_contain_after": ["isVictimEligibleForPreemption"],
+        "must_not_contain_after": ["isPreemptionAllowed"]
+      }
+    },
+    {
+      "id": "edit-add-log-rankmemory",
+      "category": "edit",
+      "question": "In `pkg/kubelet/eviction/helpers.go`, add a single `klog.V(5).InfoS(\"rankMemoryPressure: ranking pods\", \"count\", len(pods))` line as the very first statement inside the body of `rankMemoryPressure`. Do not modify any other function. Make sure the existing `k8s.io/klog/v2` import stays valid.",
+      "verify": {
+        "touched_path": "pkg/kubelet/eviction/helpers.go",
+        "must_contain_after": [
+          "rankMemoryPressure: ranking pods",
+          "func rankMemoryPressure"
+        ],
+        "must_not_contain_after": []
+      }
+    },
+    {
+      "id": "edit-extend-leader-election-comment",
+      "category": "edit",
+      "question": "In `cmd/kube-controller-manager/app/controllermanager.go`, find the function `leaderElectAndRun` and add a doc comment immediately above its declaration. The comment must say: `// leaderElectAndRun runs the controller manager under a Lease-based leader election.` Replace any existing single-line doc comment on that declaration; do not add a duplicate.",
+      "verify": {
+        "touched_path": "cmd/kube-controller-manager/app/controllermanager.go",
+        "must_contain_after": [
+          "// leaderElectAndRun runs the controller manager under a Lease-based leader election.",
+          "func leaderElectAndRun"
+        ],
+        "must_not_contain_after": []
+      }
+    },
+    {
+      "id": "edit-add-helper-pdb-eviction",
+      "category": "edit",
+      "question": "In `pkg/registry/core/pod/storage/eviction.go`, add a small unexported helper function named `pdbAllowsEviction` immediately above `checkAndDecrement`. The helper takes a single `*policyv1.PodDisruptionBudget` argument and returns `b.Status.DisruptionsAllowed > 0`. Do not modify any other function in the file, and do not change any imports.",
+      "verify": {
+        "touched_path": "pkg/registry/core/pod/storage/eviction.go",
+        "must_contain_after": [
+          "func pdbAllowsEviction",
+          "b.Status.DisruptionsAllowed > 0",
+          "func (r *EvictionREST)"
+        ],
+        "must_not_contain_after": []
+      }
+    }
+  ]
+}

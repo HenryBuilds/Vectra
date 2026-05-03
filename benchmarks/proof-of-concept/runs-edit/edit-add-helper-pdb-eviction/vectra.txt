@@ -1,0 +1,1 @@
+Added `pdbAllowsEviction` at pkg/registry/core/pod/storage/eviction.go:424, immediately above `checkAndDecrement`. No other functions or imports were modified.

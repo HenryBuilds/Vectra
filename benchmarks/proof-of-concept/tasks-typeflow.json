@@ -1,0 +1,63 @@
+{
+  "_comment": "Research tasks for the typeflow benchmark. Typeflow is a private TypeScript / Next.js workflow-automation app — outside Claude's training set, ~70k LOC, ~1150 source files. The questions probe domain-specific subsystems (sandbox, encryption, BullMQ queue, AI flow builder, executor registry) that Claude alone has to discover through Glob/Grep/Read.",
+  "repo": "typeflow",
+  "schema_version": 2,
+  "tasks": [
+    {
+      "id": "tf-encryption",
+      "category": "research",
+      "question": "Where in typeflow are user-supplied credentials encrypted at rest, what algorithm is used, and where does the encryption key come from?",
+      "verify": {
+        "must_contain": ["encryption.ts", "aes-256-gcm", "ENCRYPTION_KEY"]
+      }
+    },
+    {
+      "id": "tf-sandbox",
+      "category": "research",
+      "question": "How does typeflow execute user-supplied JavaScript in a sandboxed context for workflow node code? Name the file, the entry function, and the underlying isolation primitive.",
+      "verify": {
+        "must_contain": ["sandbox.ts", "executeInSandbox", "vm.createContext"]
+      }
+    },
+    {
+      "id": "tf-workflow-queue",
+      "category": "research",
+      "question": "How is a workflow execution dispatched as a BullMQ job in typeflow? Name the file, the function that adds a job to the queue, and the function that returns the singleton Queue instance.",
+      "verify": {
+        "must_contain": ["workflow-queue.ts", "getWorkflowQueue", "addWorkflowJob"]
+      }
+    },
+    {
+      "id": "tf-executor-registry",
+      "category": "research",
+      "question": "How does typeflow's executor registry map workflow node types to their executor functions? Name the file, the registry class, and the registration method.",
+      "verify": {
+        "must_contain": ["executor-registry.ts", "register"]
+      }
+    },
+    {
+      "id": "tf-ai-flow-builder",
+      "category": "research",
+      "question": "Where in typeflow does the AI assistant generate workflow nodes from a natural-language description, and which AI providers does it support? Name the file and the providers.",
+      "verify": {
+        "must_contain": ["ai-flow-builder.ts", "openai", "anthropic"]
+      }
+    },
+    {
+      "id": "tf-trpc-auth",
+      "category": "research",
+      "question": "How is authentication and organization-scoping enforced on typeflow's tRPC procedures? Name the procedure builder used for protected, organization-scoped endpoints.",
+      "verify": {
+        "must_contain": ["organizationProcedure", "trpc.ts"]
+      }
+    },
+    {
+      "id": "tf-credential-decrypt",
+      "category": "research",
+      "question": "When typeflow's AI Flow Builder needs to call OpenAI / Anthropic on the user's behalf, how does it fetch and decrypt the per-organization API key? Name the helper function used to decrypt credential payloads.",
+      "verify": {
+        "must_contain": ["decryptObject", "credentials"]
+      }
+    }
+  ]
+}

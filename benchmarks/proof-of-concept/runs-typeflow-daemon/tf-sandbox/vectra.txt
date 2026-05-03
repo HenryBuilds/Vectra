@@ -1,0 +1,10 @@
+Confirmed from `server/services/sandbox.ts:1-50` and the `executeInSandbox` function at lines 289-302. This is a Q&A task, not an implementation, so I'll write the answer to the plan file and exit plan mode.
+**Answer:**
+
+- **File:** `server/services/sandbox.ts`
+- **Entry function:** `executeInSandbox(code, context, timeoutMs = 5000)` — `server/services/sandbox.ts:289`
+- **Isolation primitive:** Node.js built-in **`vm` module** — `new vm.Script(...)` compiled with filename `user-code.js`, then run via `script.runInContext(context, { timeout, breakOnSigint: true })`.
+
+The sandbox locks down the context, blocks dangerous `require` targets (`child_process`, `fs`, `net`, `os`, `process`, `vm`, `worker_threads`, including `node:`-prefixed forms — see `BLOCKED_MODULES` at `server/services/sandbox.ts:24`), and bounds CPU time with a 5000ms timeout. The file's own header comment notes that Node's `vm` is **not a hard security boundary** and recommends `isolated-vm` or Docker containers for fully untrusted code.
+
+Plan file written at `C:\Users\German Classic\.claude\plans\task-how-does-typeflow-majestic-prism.md` for reference. No ExitPlanMode call — this is a research/Q&A task with no implementation to approve.

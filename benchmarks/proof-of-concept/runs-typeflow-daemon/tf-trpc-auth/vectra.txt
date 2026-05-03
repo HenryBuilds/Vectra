@@ -1,0 +1,24 @@
+This is a research question. Let me give you the direct answer based on the code.
+
+## Answer
+
+**Procedure builder:** `organizationProcedure` (defined in `server/trpc.ts:47`).
+
+**How it's enforced (layered middleware):**
+
+1. **`publicProcedure`** (`server/trpc.ts:11`) — base procedure, no checks.
+
+2. **`protectedProcedure`** (`server/trpc.ts:27-43`) — chains two middlewares:
+   - `rateLimitMiddleware` (per-IP rate limit via `apiRateLimiter`)
+   - Auth check: throws `UNAUTHORIZED` if `ctx.userId` is null. The `userId` comes from `createContext` in `server/context.ts:11-29`, which reads the `token` cookie and verifies it via `verifyToken` (JWT).
+
+3. **`organizationProcedure`** (`server/trpc.ts:47-88`) — extends `protectedProcedure` and:
+   - Requires an `organizationId: z.string().uuid()` input.
+   - Looks up the org in `db.query.organizations` → throws `NOT_FOUND` if missing.
+   - Looks up `organizationMembers` for `(organizationId, userId)` → throws `FORBIDDEN` if the user isn't a member.
+   - Augments `ctx` with `organization` and `membership` so downstream resolvers can use them without re-querying.
+
+So org-scoped endpoints get four guarantees stacked: rate-limited → authenticated → org exists → caller is a member.
+
+I'll write this finding to the plan file and exit plan mode — there's no implementation work to do here.
+Per ExitPlanMode's own guidance, I shouldn't call it for research tasks — and this is one. The answer is in the response above; the procedure builder is **`organizationProcedure`** at `server/trpc.ts:47`.

@@ -1,0 +1,1 @@
+When typeflow's AI Flow Builder needs to call OpenAI / Anthropic on the user's behalf, how does it fetch and decrypt the per-organization API key? Name the helper function used to decrypt credential payloads.

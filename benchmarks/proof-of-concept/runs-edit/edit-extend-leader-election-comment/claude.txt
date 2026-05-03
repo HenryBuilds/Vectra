@@ -1,0 +1,1 @@
+Replaced the existing doc comment on `leaderElectAndRun` at line 838 with the new wording. The `TODO` line directly above the function declaration was preserved.

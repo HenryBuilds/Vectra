@@ -1,0 +1,1 @@
+In the Kubernetes source under `pkg/apis/core/helper/qos/qos.go`, add a single-line comment immediately above the `GetPodQOS` function declaration that says: `// GetPodQOS classifies a pod into Guaranteed, Burstable, or BestEffort.`

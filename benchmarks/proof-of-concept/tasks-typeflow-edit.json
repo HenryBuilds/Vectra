@@ -1,0 +1,70 @@
+{
+  "_comment": "Edit-style tasks for the typeflow benchmark. Each task asks for a small, well-scoped, verifiable code change in typeflow. Verification: did the diff touch the right file, do the changed lines contain the expected anchors. The harness git-resets the typeflow clone before each run so the two pipelines start from an identical tree.",
+  "repo": "typeflow",
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "edit-tf-comment-encrypt",
+      "category": "edit",
+      "question": "In `lib/encryption.ts`, add a single-line doc comment immediately above the `encrypt` function declaration that says exactly: `// encrypt: AES-256-GCM, returns base64(iv).base64(tag).base64(ciphertext).`",
+      "verify": {
+        "touched_path": "lib/encryption.ts",
+        "must_contain_after": [
+          "// encrypt: AES-256-GCM, returns base64(iv).base64(tag).base64(ciphertext).",
+          "export function encrypt"
+        ],
+        "must_not_contain_after": []
+      }
+    },
+    {
+      "id": "edit-tf-rename-cleanqueue",
+      "category": "edit",
+      "question": "In `lib/queue/workflow-queue.ts`, rename the function `cleanQueue` to `purgeQueue` everywhere it is defined or called *within that single file*. Do not modify any other files.",
+      "verify": {
+        "touched_path": "lib/queue/workflow-queue.ts",
+        "must_contain_after": ["purgeQueue"],
+        "must_not_contain_after": ["cleanQueue"]
+      }
+    },
+    {
+      "id": "edit-tf-todo-encryptobject",
+      "category": "edit",
+      "question": "In `lib/encryption.ts`, add a single-line comment exactly `// TODO: support custom key derivation` immediately above the `encryptObject` function declaration. Do not change anything else.",
+      "verify": {
+        "touched_path": "lib/encryption.ts",
+        "must_contain_after": [
+          "// TODO: support custom key derivation",
+          "export function encryptObject"
+        ],
+        "must_not_contain_after": []
+      }
+    },
+    {
+      "id": "edit-tf-doc-getworkflowqueue",
+      "category": "edit",
+      "question": "In `lib/queue/workflow-queue.ts`, add a single-line doc comment immediately above the `getWorkflowQueue` function declaration that says exactly: `// getWorkflowQueue returns the lazily-initialised singleton BullMQ Queue.`",
+      "verify": {
+        "touched_path": "lib/queue/workflow-queue.ts",
+        "must_contain_after": [
+          "// getWorkflowQueue returns the lazily-initialised singleton BullMQ Queue.",
+          "export function getWorkflowQueue"
+        ],
+        "must_not_contain_after": []
+      }
+    },
+    {
+      "id": "edit-tf-helper-isbase64iv",
+      "category": "edit",
+      "question": "In `lib/encryption.ts`, add a small unexported helper function named `isBase64IvTagCt` immediately above the `encrypt` function. The helper takes a single `s: string` parameter and returns `s.split('.').length === 3`. Do not modify any other function in the file, and do not change any imports.",
+      "verify": {
+        "touched_path": "lib/encryption.ts",
+        "must_contain_after": [
+          "function isBase64IvTagCt",
+          "s.split('.').length === 3",
+          "export function encrypt"
+        ],
+        "must_not_contain_after": []
+      }
+    }
+  ]
+}

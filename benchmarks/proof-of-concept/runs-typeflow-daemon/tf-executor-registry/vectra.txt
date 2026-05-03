@@ -1,0 +1,15 @@
+I'll verify how the registry is wired before answering, since the context shows both an `ExecutorRegistry` class and a long if/else chain in `workflow-executor.ts`.
+This is a factual question with a clear answer in the codebase. Let me write the answer to the plan file and exit plan mode.
+This was a research question, not an implementation task, so I'll just answer directly.
+
+**File**: `server/services/executor-registry.ts`
+**Registry class**: `ExecutorRegistry` (defined at line 52; exposed as the singleton `executorRegistry` exported at line 86)
+**Registration methods** — three, one per flavor of executor:
+
+- `register(nodeType, executor)` (line 57) → stores into `executors: Map<string, NodeExecutor>`. Used for normal nodes (`postgres`, `httpRequest`, `openai`, `code`, `aiAgent`, …).
+- `registerConditional(nodeType, executor)` (line 61) → stores into `conditionalExecutors: Map<string, ConditionalNodeExecutor>`. Used for branching nodes (`if`, `switch`).
+- `registerPassThrough(nodeType)` (line 65) → adds to `passThroughTypes: Set<string>`. Used for trigger/noop types that simply forward input (`trigger`, `webhook`, `noop`, `manualTrigger`, `scheduleTrigger`, `chatTrigger`, `workflowTrigger`).
+
+The mapping itself is just `Map.set(nodeType, executor)` keyed by the node's `type` string. Lookups go through `get`, `getConditional`, `isPassThrough`, or the combined `has` predicate. All built-in executors are wired up at module load time in the same file (lines 131–323), e.g. `executorRegistry.register("postgres", { execute: async (node, inputItems, ctx) => executePostgresNode(...) })`.
+
+One caveat worth flagging: `server/services/workflow-executor.ts` still carries a long `if (currentNode.type === ...)` chain. The registry file's header comment says it "replaces the monolithic if/else chain in workflow-executor.ts," and `executor-registry.ts` is not imported anywhere in the codebase yet — so the registry exists and is fully populated, but the main `WorkflowExecutor` does not currently consume it. If you need the *currently active* dispatch mechanism (vs. the intended one), it's still the if/else chain in `workflow-executor.ts`.

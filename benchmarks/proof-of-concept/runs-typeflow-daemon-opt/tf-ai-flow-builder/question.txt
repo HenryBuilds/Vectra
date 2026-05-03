@@ -1,0 +1,1 @@
+Where in typeflow does the AI assistant generate workflow nodes from a natural-language description, and which AI providers does it support? Name the file and the providers.

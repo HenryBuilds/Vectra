@@ -1,0 +1,4 @@
+All four occurrences are within the single target file. Renaming now.
+Renamed all 4 occurrences (definition at line 395, doc comment at line 394, and two call sites at lines 280 and 379) in `default_preemption.go`. No other files were modified.
+
+Note: there are likely callers/tests in other files that still reference `isPreemptionAllowed` and will now fail to compile, but per your instructions I did not touch them.

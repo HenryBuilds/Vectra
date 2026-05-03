@@ -1,0 +1,1 @@
+Where in typeflow are user-supplied credentials encrypted at rest, what algorithm is used, and where does the encryption key come from?

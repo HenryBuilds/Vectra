@@ -1,0 +1,1 @@
+In `pkg/kubelet/eviction/helpers.go`, add a single `klog.V(5).InfoS("rankMemoryPressure: ranking pods", "count", len(pods))` line as the very first statement inside the body of `rankMemoryPressure`. Do not modify any other function. Make sure the existing `k8s.io/klog/v2` import stays valid.

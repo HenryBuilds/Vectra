@@ -1,0 +1,7 @@
+- **File:** `server/services/executor-registry.ts`
+- **Registry class:** `ExecutorRegistry` (executor-registry.ts:52)
+- **Registration method:** `register(nodeType, executor)` (executor-registry.ts:57), which stores the executor in a private `Map<string, NodeExecutor>` keyed by node type string.
+
+The class also exposes two sibling registration methods for special cases: `registerConditional(nodeType, executor)` for branching nodes (IF/Switch) and `registerPassThrough(nodeType)` for nodes that just forward input.
+
+Note: the actual `WorkflowExecutor` in `server/services/workflow-executor.ts` doesn't yet consume this registry — it dispatches via a long `if (currentNode.type === "...")` chain (workflow-executor.ts:233+). The `ExecutorRegistry` appears to be the intended target of an in-progress refactor away from that chain.

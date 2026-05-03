@@ -1,0 +1,22 @@
+I'll investigate the tRPC setup to find the procedure builders and how auth/org-scoping is enforced.
+Let me verify the findings by reading the actual file.
+I have a verified answer. Let me write it to the plan file.
+The procedure builder for protected, organization-scoped endpoints is **`organizationProcedure`**, defined in `server/trpc.ts:47-88`.
+
+Enforcement is layered in three builders in `server/trpc.ts`:
+
+1. **`publicProcedure`** (`server/trpc.ts:11`) — bare `t.procedure`, no auth. Used by `auth` router.
+
+2. **`protectedProcedure`** (`server/trpc.ts:27-43`) — applies:
+   - `rateLimitMiddleware` (`server/trpc.ts:14-25`) — `apiRateLimiter.check(ctx.clientIp)` → `TOO_MANY_REQUESTS`.
+   - Auth check (`server/trpc.ts:30-35`) — `if (!ctx.userId) throw new TRPCError({ code: "UNAUTHORIZED" })`. The context's `userId` comes from a JWT pulled out of cookies and verified in `server/context.ts`.
+
+3. **`organizationProcedure`** (`server/trpc.ts:47-88`) — extends `protectedProcedure` (so it inherits rate-limit + auth), then:
+   - Requires `input: { organizationId: z.string().uuid() }`.
+   - Loads the org; throws `NOT_FOUND` if missing (`server/trpc.ts:59-64`).
+   - Loads the membership row with `and(eq(organizationMembers.organizationId, ...), eq(organizationMembers.userId, ctx.userId!))` (`server/trpc.ts:67-72`); throws `FORBIDDEN` if absent (`:74-79`).
+   - Attaches `organization` and `membership` onto `ctx` for resolvers downstream.
+
+So the chain is: cookie JWT → `ctx.userId` → `protectedProcedure` (rate-limit + login required) → `organizationProcedure` (valid `organizationId` + verified membership). Routers like `workflows`, `environments`, `webhooks`, `credentials`, and the org-mutation half of `organizations` all import `organizationProcedure`; only `auth` uses `publicProcedure`.
+
+Plan file with the full write-up: `C:\Users\German Classic\.claude\plans\task-how-is-authentication-iterative-nygaard.md`. (Skipping `ExitPlanMode` — its own description says not to call it for research questions.)
