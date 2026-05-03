@@ -68,6 +68,11 @@
         "command": "vectra.manageAllowList",
         "title": "Vectra: Manage always-allow rules",
         "category": "Vectra"
+      },
+      {
+        "command": "vectra.resetIndex",
+        "title": "Vectra: Reset & rebuild index",
+        "category": "Vectra"
       }
     ],
     "menus": {
@@ -154,6 +159,13 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Reindex the workspace automatically when files change. The CLI uses BLAKE3 file hashes and skips unchanged files, so re-runs are cheap. Disable if you prefer to run `Vectra: Index workspace` manually."
+        },
+        "vectra.chatIdleTimeoutSeconds": {
+          "type": "integer",
+          "default": 600,
+          "minimum": 60,
+          "maximum": 3600,
+          "markdownDescription": "Watchdog timeout in seconds. If `vectra ask` produces no stdout/stderr for this long the chat panel kills the subprocess and surfaces a friendly error so the run does not hang forever. Raise this on slow machines doing first-time model loads."
         },
         "vectra.autoIndexDebounceMs": {
           "type": "integer",

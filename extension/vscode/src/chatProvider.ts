@@ -629,6 +629,23 @@ export class VectraChatPanel {
             return;
         }
 
+        // The bridge MUST be ready before we spawn — otherwise the
+        // MCP config we write embeds a port of 0 and claude calls
+        // back to a closed socket, which surfaces to the user as
+        // "the chat froze on the first edit". Surface an actionable
+        // error and abort the turn instead.
+        if (!this.bridge.isReady) {
+            this.post({
+                type: 'error',
+                id: m.id,
+                message:
+                    'Vectra: permission bridge is not ready (probably a port-bind ' +
+                    'failure during activation). Reload the window and try again.',
+            });
+            this.post({ type: 'done', id: m.id, exitCode: -1 });
+            return;
+        }
+
         const cfg = vscode.workspace.getConfiguration('vectra');
         const binary = (cfg.get<string>('binary', 'vectra').trim() || 'vectra');
 
@@ -725,7 +742,48 @@ export class VectraChatPanel {
         // text_deltas), so we accumulate until we see a `\n`.
         let stdoutBuffer = '';
 
+        // Activity watchdog. If the child stops emitting *any*
+        // output for `idleMs` we assume it has wedged (claude stuck
+        // on a network read, vectra deadlocked on SQLite, …) and
+        // kill it. The user sees the kill as a friendly error with
+        // a Retry hint instead of the chat staring blankly forever.
+        // claude streams thinking deltas during inference so true
+        // silence is a strong signal — the default is generous
+        // enough to cover slow cold starts (model load, OAuth
+        // refresh) but short enough that walking away from a hung
+        // run recovers a usable panel.
+        const idleMs =
+            (cfg.get<number>('chatIdleTimeoutSeconds', 600) || 600) * 1000;
+        let watchdogFired = false;
+        let watchdog: NodeJS.Timeout | undefined = setTimeout(() => {
+            watchdogFired = true;
+            this.output.appendLine(
+                `[chat] watchdog: no output from vectra for ${Math.round(idleMs / 1000)}s — killing`,
+            );
+            try {
+                proc.kill();
+            } catch {
+                // best-effort
+            }
+        }, idleMs);
+        const resetWatchdog = (): void => {
+            if (!watchdog) return;
+            clearTimeout(watchdog);
+            watchdog = setTimeout(() => {
+                watchdogFired = true;
+                this.output.appendLine(
+                    `[chat] watchdog: no output from vectra for ${Math.round(idleMs / 1000)}s — killing`,
+                );
+                try {
+                    proc.kill();
+                } catch {
+                    // best-effort
+                }
+            }, idleMs);
+        };
+
         proc.stdout?.on('data', (d: Buffer) => {
+            resetWatchdog();
             stdoutBuffer += d.toString('utf8');
             let nl = stdoutBuffer.indexOf('\n');
             while (nl !== -1) {
@@ -736,6 +794,7 @@ export class VectraChatPanel {
             }
         });
         proc.stderr?.on('data', (d: Buffer) => {
+            resetWatchdog();
             // Vectra prints retrieval pipeline timings + status to
             // stderr; surface those as meta lines so the user sees
             // what's happening before claude's reply arrives.
@@ -746,7 +805,11 @@ export class VectraChatPanel {
         proc.on('error', (err) => {
             this.post({ type: 'error', id: m.id, message: err.message });
         });
-        proc.on('close', (code) => {
+        proc.on('close', (code, signal) => {
+            if (watchdog) {
+                clearTimeout(watchdog);
+                watchdog = undefined;
+            }
             // Flush any trailing data without a final newline.
             if (stdoutBuffer.length > 0) {
                 this.dispatchClaudeLine(m.id, stdoutBuffer);
@@ -762,13 +825,29 @@ export class VectraChatPanel {
             this.pendingApprovals.clear();
             const exit = code ?? 0;
 
+            // Watchdog-induced kill: surface a clear "we gave up
+            // because there was no activity" instead of letting the
+            // user puzzle over a non-zero exit code.
+            if (watchdogFired) {
+                this.post({
+                    type: 'error',
+                    id: m.id,
+                    message:
+                        `Vectra: cancelled the run because there was no output for ` +
+                        `${Math.round(idleMs / 1000)}s. Resend the message to retry, ` +
+                        `or raise 'vectra.chatIdleTimeoutSeconds' if your machine is slow.`,
+                });
+                this.post({ type: 'done', id: m.id, exitCode: -1 });
+                return;
+            }
+
             // Pattern-match common Vectra errors and surface a
             // structured error bubble with actionable buttons. The
             // raw stderr already streamed as meta; this gives the
             // user a single, clearly-rendered next step.
             if (exit !== 0) {
                 const actions = this.actionsForStderr(stderrBuffer);
-                const friendly = this.friendlyMessage(stderrBuffer, exit);
+                const friendly = this.friendlyMessage(stderrBuffer, exit, signal);
                 this.post({
                     type: 'error',
                     id: m.id,
@@ -1048,6 +1127,9 @@ export class VectraChatPanel {
         if (/error:\s*no project root detected/i.test(stderr)) {
             return [{ label: 'Index this workspace', commandId: 'vectra.index' }];
         }
+        if (isCorruptIndex(stderr)) {
+            return [{ label: 'Reset & rebuild index', commandId: 'vectra.resetIndex' }];
+        }
         if (/error:\s*model not cached/i.test(stderr)) {
             // No first-class command for `vectra model pull` yet;
             // surface the manual hint without an action button.
@@ -1056,7 +1138,7 @@ export class VectraChatPanel {
         return [];
     }
 
-    private friendlyMessage(stderr: string, exit: number): string {
+    private friendlyMessage(stderr: string, exit: number, signal?: NodeJS.Signals | null): string {
         const indexMatch = stderr.match(/error:\s*index not found at\s+([^\n]+)/i);
         if (indexMatch) {
             return `No Vectra index at ${indexMatch[1].trim()}. ` +
@@ -1066,12 +1148,32 @@ export class VectraChatPanel {
             return 'No project root detected (looked for .vectra or .git). ' +
                 'Open a project folder, or initialise the index.';
         }
+        if (isCorruptIndex(stderr)) {
+            return (
+                'Vectra: the index database appears corrupt. The most reliable ' +
+                'recovery is to delete .vectra/index.db and re-index — click ' +
+                '"Reset & rebuild index" below.'
+            );
+        }
         if (/error:\s*model not cached/i.test(stderr)) {
             return 'Embedding model is not cached locally. ' +
                 'Run `vectra model pull <name>` in a terminal, then retry.';
         }
         if (/error:\s*unknown model/i.test(stderr)) {
             return 'Unknown embedding model. Run `vectra model list` to see available names.';
+        }
+        // Signal-induced terminations get a dedicated message: the
+        // exit code is meaningless on its own (negative or 128+sig
+        // depending on shell), and the user wants to know whether
+        // they killed it, the OS killed it, or vectra crashed.
+        if (signal) {
+            return (
+                `Vectra was terminated by signal ${signal}. ` +
+                (signal === 'SIGTERM' || signal === 'SIGINT'
+                    ? 'This usually means the chat or extension was cancelled.'
+                    : 'This usually means the OS killed the process — check for OOM ' +
+                      'or crashing native libraries in the Vectra output channel.')
+            );
         }
         // Fallback: surface the last `error:` line if any, else the
         // exit code, so the user sees something concrete.
@@ -1148,4 +1250,19 @@ function randomNonce(): string {
         out += chars[Math.floor(Math.random() * chars.length)];
     }
     return out;
+}
+
+// Detect SQLite / index corruption signatures in vectra's stderr.
+// These are the strings SQLite itself emits via its rc-to-string
+// machinery; vectra surfaces them verbatim rather than masking them
+// behind a generic "index error", which makes them straightforward
+// to pattern-match.
+function isCorruptIndex(stderr: string): boolean {
+    return (
+        /database disk image is malformed/i.test(stderr) ||
+        /file is not a database/i.test(stderr) ||
+        /database is locked/i.test(stderr) ||
+        /index is corrupt/i.test(stderr) ||
+        /SQLITE_CORRUPT/.test(stderr)
+    );
 }

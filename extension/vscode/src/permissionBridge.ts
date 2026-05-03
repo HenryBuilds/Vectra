@@ -97,6 +97,17 @@ export class PermissionBridge implements vscode.Disposable {
     }
 
     /**
+     * True once the listener has bound a real port and is ready to
+     * serve approvals. Callers should check this before spawning a
+     * subprocess that points at the bridge — otherwise claude will
+     * call back to a port that nothing is listening on, and the
+     * approval flow looks "stuck" to the user.
+     */
+    get isReady(): boolean {
+        return this.port > 0;
+    }
+
+    /**
      * Bearer token the MCP-side script must include in its
      * `Authorization: Bearer <token>` header. Per-activation; never
      * persisted to disk.

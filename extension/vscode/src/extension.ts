@@ -222,6 +222,56 @@ function buildIndexArgs(): string[] {
     return args;
 }
 
+// Recovery path for a corrupt .vectra/index.db. Asks for explicit
+// confirmation, deletes the SQLite file plus the WAL/SHM sidecars,
+// and runs a fresh `vectra index .`. Surfaced as the action button
+// on chat error bubbles when stderr matches a SQLite-corruption
+// signature; also available manually via the command palette.
+async function commandResetIndex(output: vscode.OutputChannel): Promise<void> {
+    const cwd = workspaceRoot();
+    if (!cwd) {
+        vscode.window.showErrorMessage('Vectra needs an open workspace folder.');
+        return;
+    }
+
+    const confirm = await vscode.window.showWarningMessage(
+        'Delete .vectra/index.db and rebuild the index?',
+        {
+            modal: true,
+            detail:
+                'The current index file is unrecoverable from the chat panel. ' +
+                'Deleting it discards cached chunks and embeddings; the next ' +
+                'index run will rebuild everything from scratch.',
+        },
+        'Delete & rebuild',
+    );
+    if (confirm !== 'Delete & rebuild') return;
+
+    const indexUri = vscode.Uri.joinPath(vscode.Uri.file(cwd), '.vectra', 'index.db');
+    const sidecars = ['index.db-wal', 'index.db-shm'].map((n) =>
+        vscode.Uri.joinPath(vscode.Uri.file(cwd), '.vectra', n),
+    );
+
+    output.show(true);
+    output.appendLine('[vectra: resetting index]');
+    for (const uri of [indexUri, ...sidecars]) {
+        try {
+            await vscode.workspace.fs.delete(uri, { useTrash: false });
+            output.appendLine(`  deleted ${uri.fsPath}`);
+        } catch {
+            // File may simply not exist (no WAL/SHM if the DB was
+            // closed cleanly); silently skip.
+        }
+    }
+
+    const release = await indexLock.acquire();
+    try {
+        await runVectra(buildIndexArgs(), cwd, output, 'Vectra: rebuilding index from scratch…');
+    } finally {
+        release();
+    }
+}
+
 async function commandIndex(output: vscode.OutputChannel): Promise<void> {
     const cwd = workspaceRoot();
     if (!cwd) {
@@ -395,6 +445,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('vectra.reindexWithModel', () =>
             commandReindexWithModel(output),
         ),
+        vscode.commands.registerCommand('vectra.resetIndex', () => commandResetIndex(output)),
         vscode.commands.registerCommand('vectra.newChat', () => VectraChatPanel.newChat()),
         vscode.commands.registerCommand('vectra.showHistory', () =>
             VectraChatPanel.showHistory(),
