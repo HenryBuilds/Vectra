@@ -315,6 +315,29 @@ async function commandReindexWithModel(output: vscode.OutputChannel): Promise<vo
 
     const release = await indexLock.acquire();
     try {
+        // Pull the model first when the user picked an embedder.
+        // `vectra model pull` is idempotent — already-cached models
+        // exit immediately with a "already cached" line — so we run
+        // it unconditionally rather than probing first. Skipping the
+        // pull would surface as a confusing "model not cached. Run
+        // `vectra model pull <name>` first." stderr from the index
+        // command, exactly the kind of follow-up step the in-UI
+        // command was meant to remove. Symbol-only ("") needs no pull.
+        if (picked.value !== '') {
+            const pullCode = await runVectra(
+                ['model', 'pull', picked.value],
+                cwd,
+                output,
+                `Vectra: ensuring ${picked.label} is downloaded…`,
+            );
+            if (pullCode !== 0) {
+                output.appendLine(
+                    `[vectra: model pull failed (exit ${pullCode}); skipping reindex. ` +
+                        `check the output above and re-run "Vectra: Re-index with model…" once it is fixed]`,
+                );
+                return;
+            }
+        }
         await runVectra(
             buildIndexArgs(),
             cwd,
