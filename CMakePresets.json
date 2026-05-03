@@ -137,6 +137,59 @@
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
       }
+    },
+    {
+      "name": "_gpu-cuda-multiarch",
+      "hidden": true,
+      "description": "Hidden mixin: CUDA on, GGML_NATIVE off, redistributable arch list (Turing → Blackwell). Inherit from this in any *-cuda-* preset that ships a binary.",
+      "cacheVariables": {
+        "VECTRA_GPU_CUDA": "ON",
+        "VECTRA_AUTO_GPU": "OFF",
+        "GGML_NATIVE": "OFF",
+        "CMAKE_CUDA_ARCHITECTURES": "75-virtual;80-virtual;86-real;89-real;120a-real"
+      }
+    },
+    {
+      "name": "linux-clang-cuda-release",
+      "displayName": "Linux · Clang · CUDA · Release (multi-arch)",
+      "inherits": ["_gpu-cuda-multiarch", "linux-clang-release"]
+    },
+    {
+      "name": "linux-gcc-cuda-release",
+      "displayName": "Linux · GCC · CUDA · Release (multi-arch)",
+      "inherits": ["_gpu-cuda-multiarch", "linux-gcc-release"]
+    },
+    {
+      "name": "windows-msvc-cuda-release",
+      "displayName": "Windows · MSVC · CUDA · Release (multi-arch)",
+      "inherits": ["_gpu-cuda-multiarch", "windows-msvc-release"]
+    },
+    {
+      "name": "macos-clang-metal-release",
+      "displayName": "macOS · Clang · Metal · Release",
+      "inherits": "macos-clang-release",
+      "cacheVariables": {
+        "VECTRA_GPU_METAL": "ON",
+        "VECTRA_AUTO_GPU": "OFF"
+      }
+    },
+    {
+      "name": "linux-clang-rocm-release",
+      "displayName": "Linux · Clang · HIP/ROCm · Release",
+      "inherits": "linux-clang-release",
+      "cacheVariables": {
+        "VECTRA_GPU_HIP": "ON",
+        "VECTRA_AUTO_GPU": "OFF"
+      }
+    },
+    {
+      "name": "linux-clang-vulkan-release",
+      "displayName": "Linux · Clang · Vulkan · Release",
+      "inherits": "linux-clang-release",
+      "cacheVariables": {
+        "VECTRA_GPU_VULKAN": "ON",
+        "VECTRA_AUTO_GPU": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -146,7 +199,13 @@
     { "name": "linux-gcc-release",         "configurePreset": "linux-gcc-release" },
     { "name": "macos-clang-release",       "configurePreset": "macos-clang-release" },
     { "name": "windows-msvc-release",      "configurePreset": "windows-msvc-release", "configuration": "Release" },
-    { "name": "windows-clang-release",     "configurePreset": "windows-clang-release" }
+    { "name": "windows-clang-release",     "configurePreset": "windows-clang-release" },
+    { "name": "linux-clang-cuda-release",  "configurePreset": "linux-clang-cuda-release" },
+    { "name": "linux-gcc-cuda-release",    "configurePreset": "linux-gcc-cuda-release" },
+    { "name": "windows-msvc-cuda-release", "configurePreset": "windows-msvc-cuda-release", "configuration": "Release" },
+    { "name": "macos-clang-metal-release", "configurePreset": "macos-clang-metal-release" },
+    { "name": "linux-clang-rocm-release",  "configurePreset": "linux-clang-rocm-release" },
+    { "name": "linux-clang-vulkan-release","configurePreset": "linux-clang-vulkan-release" }
   ],
   "testPresets": [
     {

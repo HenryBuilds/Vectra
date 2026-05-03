@@ -63,6 +63,11 @@ ctest --preset release
 | `macos-clang-release` | macOS (Apple Silicon or Intel) |
 | `windows-msvc-release` / `windows-clang-release` | Windows with MSVC or clang-cl |
 | `asan` / `tsan` | Sanitizer builds (Unix only) |
+| `linux-clang-cuda-release` / `linux-gcc-cuda-release` | Linux + CUDA, multi-arch redistributable (Turing → Blackwell) |
+| `windows-msvc-cuda-release` | Windows + CUDA, same multi-arch list |
+| `macos-clang-metal-release` | macOS + Metal (explicit; equivalent to the auto-detect default on macOS) |
+| `linux-clang-rocm-release` | Linux + HIP/ROCm (AMD) |
+| `linux-clang-vulkan-release` | Linux + Vulkan (cross-vendor fallback) |
 
 ### GPU acceleration
 
