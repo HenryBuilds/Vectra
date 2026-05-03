@@ -191,8 +191,9 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run check-version && npm run compile",
+    "vscode:prepublish": "npm run check-version && npm run sync-license && npm run compile",
     "check-version": "node scripts/check-version.js",
+    "sync-license": "node scripts/sync-license.js",
     "compile": "npm run build:host && npm run build:webview",
     "build:host": "tsc -p tsconfig.host.json",
     "build:webview": "esbuild src/webview/index.tsx --bundle --minify --format=iife --target=es2022 --outfile=out/webview.js --jsx=automatic --platform=browser --loader:.css=text",

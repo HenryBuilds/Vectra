@@ -72,3 +72,7 @@ callgrind.out.*
 # Generated docs
 docs/_build/
 docs/html/
+
+# Extension generated artifacts (sync-license.js mirrors the
+# repo-root LICENSE here at vsce-package time)
+extension/vscode/LICENSE
