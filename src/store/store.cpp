@@ -239,6 +239,10 @@ Store::Store(Store&&) noexcept = default;
 Store& Store::operator=(Store&&) noexcept = default;
 
 Store Store::open(const std::filesystem::path& db_path) {
+    return Store::open(db_path, OpenOptions{});
+}
+
+Store Store::open(const std::filesystem::path& db_path, const OpenOptions& options) {
     auto impl = std::make_unique<Impl>();
 
     sqlite3* raw = nullptr;
@@ -255,7 +259,14 @@ Store Store::open(const std::filesystem::path& db_path) {
 
     detail::ensure_schema(impl->db.get());
     prepare_all(*impl);
-    rebuild_vector_index(*impl);
+    if (!options.skip_vector_index) {
+        // Pulling every embedding row into the in-memory HNSW graph is
+        // an O(N log N) operation; on a hybrid-indexed kubernetes-scale
+        // repo (~245k chunks) this dominates startup at multiple
+        // minutes. Callers that know they will not vector-search the
+        // store skip this entirely.
+        rebuild_vector_index(*impl);
+    }
 
     return Store{std::move(impl)};
 }

@@ -66,6 +66,10 @@ std::vector<Hit> Retriever::retrieve(std::string_view query, const RetrieveOptio
     std::unordered_map<std::string, double> fused_scores;
     fused_scores.reserve(opts.candidate_pool * 2);
 
+    // FTS5 rank-0 hash lives outside the symbol-search block so the
+    // dominance check after fusion can pin it back to the top.
+    std::string dominant_symbol_hash;
+
     // ---- Symbol search via FTS5 trigram ---------------------------------
     // Always available; this is the lexical signal for code identifiers.
     {
@@ -73,6 +77,22 @@ std::vector<Hit> Retriever::retrieve(std::string_view query, const RetrieveOptio
         const auto symbol_hits = store_.search_symbols(query, opts.candidate_pool);
         for (std::size_t i = 0; i < symbol_hits.size(); ++i) {
             fused_scores[symbol_hits[i].chunk_hash] += rrf_contribution(opts.symbol_weight, i);
+        }
+        // Dominance signal: when rank-0's BM25 is clearly better than
+        // rank-1's, the FTS5 channel is highly confident. SQLite's
+        // bm25() returns *negative* numbers; more negative is better.
+        // "Dominant" here means rank-0 is at least
+        // `symbol_dominance_ratio`× as good as rank-1.
+        if (opts.protect_dominant_symbol_hit && symbol_hits.size() >= 2) {
+            const double r0 = symbol_hits[0].score;
+            const double r1 = symbol_hits[1].score;
+            if (r0 < 0.0 && r1 < 0.0 && r0 < r1 * opts.symbol_dominance_ratio) {
+                dominant_symbol_hash = symbol_hits[0].chunk_hash;
+            }
+        } else if (opts.protect_dominant_symbol_hit && symbol_hits.size() == 1) {
+            // Single-hit scenario — that one chunk is by definition
+            // the FTS5 answer.
+            dominant_symbol_hash = symbol_hits[0].chunk_hash;
         }
         stage("symbol search (FTS5)", symbol_hits.size(), t);
     }
@@ -110,12 +130,47 @@ std::vector<Hit> Retriever::retrieve(std::string_view query, const RetrieveOptio
             return a.second > b.second;
         });
 
+        // Pin the dominant FTS5 hit to position 0. Without this, a
+        // confident exact-symbol match can be pushed out of the top-K
+        // by RRF dilution from the vector channel — measured on the
+        // typeflow `executor-registry` query, where hybrid took 59 s
+        // vs 17 s for symbol-only because the right chunk dropped to
+        // rank ~7. Implemented as a swap, not a score-bump, so the
+        // visible fusion_score on the returned Hit stays meaningful.
+        if (!dominant_symbol_hash.empty() && !ranked.empty() &&
+            ranked.front().first != dominant_symbol_hash) {
+            const auto it = std::find_if(ranked.begin(), ranked.end(), [&](const auto& p) {
+                return p.first == dominant_symbol_hash;
+            });
+            if (it != ranked.end()) {
+                std::iter_swap(ranked.begin(), it);
+            }
+        }
+
+        // Adaptive top-K: stop including chunks once the fused-score
+        // drop becomes a "cliff" (rank-N+1 < rank-N * cliff_ratio).
+        // Caps at [min_k, k]. Off by default — callers that already
+        // know the right K should not have it second-guessed.
+        std::size_t cutoff = opts.k;
+        if (opts.adaptive_k && ranked.size() >= 2) {
+            std::size_t i = 1;
+            for (; i < std::min(opts.k, ranked.size()); ++i) {
+                if (ranked[i - 1].second <= 0.0) break;  // can't compute ratio
+                const double ratio = ranked[i].second / ranked[i - 1].second;
+                if (ratio < opts.adaptive_cliff_ratio) {
+                    break;  // cliff: drop everything from i onward
+                }
+            }
+            cutoff = std::max(opts.min_k, i);
+            cutoff = std::min(cutoff, opts.k);
+        }
+
         // Without a reranker, only the top-K chunks need to be looked
         // up. With a reranker we keep up to candidate_pool candidates
         // for the cross-encoder pass, then truncate to k afterwards.
         const std::size_t pool_size = (reranker_ != nullptr)
                                           ? std::min(opts.candidate_pool, ranked.size())
-                                          : std::min(opts.k, ranked.size());
+                                          : std::min(cutoff, ranked.size());
         if (ranked.size() > pool_size) {
             ranked.resize(pool_size);
         }

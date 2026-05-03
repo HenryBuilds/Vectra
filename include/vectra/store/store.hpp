@@ -53,12 +53,29 @@ struct VectorHit {
 
 class Store {
 public:
+    // Knobs for Store::open. The default policy is "load everything
+    // the consumer might want" so that legacy callers keep working;
+    // hot paths that know they only need FTS5 retrieval should set
+    // `skip_vector_index = true` to avoid the multi-minute HNSW
+    // rebuild on a hybrid-indexed (~245k embedding) database.
+    struct OpenOptions {
+        // When true, Store::open does NOT pull every embedding row
+        // into the in-memory usearch graph. Vector search will be
+        // unavailable on the returned Store; FTS5 / symbol search
+        // still work. Useful for one-shot CLIs that only want
+        // symbol retrieval against a DB that happens to also carry
+        // embeddings.
+        bool skip_vector_index = false;
+    };
+
     // Open or create a Vectra database at `db_path`. If the file does
     // not exist it is created with the current schema; if it exists
     // the schema version is checked and refused if newer than what
     // this binary understands. Throws std::runtime_error on any I/O
     // or schema mismatch.
     [[nodiscard]] static Store open(const std::filesystem::path& db_path);
+    [[nodiscard]] static Store open(const std::filesystem::path& db_path,
+                                    const OpenOptions& options);
 
     ~Store();
     Store(Store&&) noexcept;

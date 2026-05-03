@@ -118,6 +118,16 @@ struct AskOptions {
     // assistant text, and per-turn usage stats. Default off so
     // terminal users keep seeing readable output.
     bool stream_json = false;
+
+    // When non-empty, route retrieval to a running `vectra serve`
+    // instance instead of opening the index in-process. The url is
+    // a base ("http://127.0.0.1:7777") that ask POSTs `/retrieve`
+    // against. Skips the embedder load + HNSW build cost on every
+    // call — important for hybrid retrieval where the GGUF embedder
+    // takes 1-3s to load. The daemon must be backed by the same
+    // index file the caller would have opened locally; vectra ask
+    // does not validate this.
+    std::string daemon_url;
 };
 
 [[nodiscard]] int run_ask(const AskOptions& opts);

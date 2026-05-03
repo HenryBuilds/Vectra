@@ -29,6 +29,7 @@
 #include "ask_command.hpp"
 #include "index_command.hpp"
 #include "search_command.hpp"
+#include "serve_command.hpp"
 
 #if VECTRA_HAS_EMBED
 #include "model_command.hpp"
@@ -61,7 +62,7 @@ int main(int argc, char** argv) {
     // the canonical form. Anything that looks like a subcommand
     // (`index`, `search`, `ask`, `model`, `--help`, `-h`,
     // `--version`, `-V`) is left alone.
-    static constexpr std::string_view kSubcommands[] = {"index", "search", "ask", "model"};
+    static constexpr std::string_view kSubcommands[] = {"index", "search", "ask", "model", "serve"};
     std::vector<char*> rewritten_argv;
     if (argc >= 2 && argv[1] != nullptr && argv[1][0] != '\0' && argv[1][0] != '-') {
         const std::string_view first{argv[1]};
@@ -211,9 +212,46 @@ int main(int argc, char** argv) {
                       "clients; humans want the default text output.");
     ask_cmd->add_flag(
         "--quiet", ask_opts.quiet, "Suppress per-stage retrieval timing output on stderr");
+    ask_cmd->add_option("--daemon-url",
+                        ask_opts.daemon_url,
+                        "POST retrieval to a running `vectra serve` instead of running it "
+                        "in-process. Skips the embedder cold-start on every call. "
+                        "Example: --daemon-url http://127.0.0.1:7777");
     ask_cmd->callback([&] {
         try {
             exit_code = vectra::cli::run_ask(ask_opts);
+        } catch (const std::exception& e) {
+            fmt::print(stderr, "error: {}\n", e.what());
+            exit_code = 1;
+        }
+    });
+
+    // ---- serve -----------------------------------------------------------
+    // Long-running retrieval daemon — holds the index, embedder, and
+    // optional reranker in RAM and answers `POST /retrieve` against
+    // them. Pair with `vectra ask --daemon-url …` to skip the model-
+    // load cost on every call.
+    auto* serve_cmd =
+        app.add_subcommand("serve", "Run the local retrieval daemon (warm embedder, fast queries)");
+
+    vectra::cli::ServeOptions serve_opts;
+    serve_cmd->add_option("--root", serve_opts.repo_root, "Project root (default: walk up from CWD)")
+        ->check(CLI::ExistingDirectory);
+    serve_cmd->add_option("--db", serve_opts.db, "Index DB (default: <root>/.vectra/index.db)");
+    serve_cmd->add_option(
+        "--model", serve_opts.model, "Embedding model name (skip for symbol-only retrieval)");
+    serve_cmd->add_option("--reranker",
+                          serve_opts.reranker,
+                          "Cross-encoder reranker model name (e.g. qwen3-rerank-0.6b)");
+    serve_cmd->add_option("--port", serve_opts.port, "Localhost port to bind")->default_val(7777);
+    serve_cmd->add_option(
+        "--bind", serve_opts.bind_host, "Bind address (default: 127.0.0.1, localhost-only)");
+    serve_cmd->add_option(
+        "-k,--top-k", serve_opts.default_k, "Default top-K when a request omits `k`");
+    serve_cmd->add_flag("-q,--quiet", serve_opts.quiet, "Suppress per-request log lines");
+    serve_cmd->callback([&] {
+        try {
+            exit_code = vectra::cli::run_serve(serve_opts);
         } catch (const std::exception& e) {
             fmt::print(stderr, "error: {}\n", e.what());
             exit_code = 1;

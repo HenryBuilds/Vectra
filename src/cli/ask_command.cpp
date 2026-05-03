@@ -4,6 +4,12 @@
 
 #include <fmt/format.h>
 
+// httplib + nlohmann::json power the daemon client path. They are
+// only included when --daemon-url is set, so the include cost shows
+// up here but the runtime cost is gated on the flag.
+#include <httplib.h>
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <exception>
@@ -56,6 +62,81 @@ namespace fs = std::filesystem;
     c.kind = std::string{core::chunk_kind_name(hit.kind)};
     c.text = hit.text;
     return c;
+}
+
+// Split a `--daemon-url` value like `http://127.0.0.1:7777` (with
+// optional trailing slash) into the (scheme+host:port) base that
+// httplib::Client accepts. We do not support https for now — the
+// daemon binds to 127.0.0.1 only, so plaintext is fine.
+struct DaemonEndpoint {
+    std::string base;  // e.g. "http://127.0.0.1:7777"
+};
+
+[[nodiscard]] DaemonEndpoint parse_daemon_url(std::string_view url) {
+    DaemonEndpoint ep;
+    std::string s{url};
+    while (!s.empty() && s.back() == '/') s.pop_back();
+    if (s.empty() || (s.find("http://") != 0 && s.find("https://") != 0)) {
+        throw std::runtime_error(
+            fmt::format("--daemon-url must be a full http://host:port (got '{}')", url));
+    }
+    ep.base = std::move(s);
+    return ep;
+}
+
+// POST /retrieve at the daemon, parse the response into ContextChunks.
+// Throws on transport failure or schema mismatch — caller turns the
+// exception into a friendly error.
+[[nodiscard]] std::vector<ContextChunk> fetch_from_daemon(const DaemonEndpoint& ep,
+                                                          const std::string& task,
+                                                          std::size_t k,
+                                                          std::int64_t& took_ms_out) {
+    httplib::Client cli(ep.base);
+    cli.set_connection_timeout(2, 0);  // 2s — daemon is local; longer = it's wedged
+    cli.set_read_timeout(60, 0);       // generous for slow embedders on big repos
+
+    nlohmann::json req;
+    req["task"] = task;
+    if (k > 0) req["k"] = k;
+
+    auto res = cli.Post("/retrieve", req.dump(), "application/json");
+    if (!res) {
+        throw std::runtime_error(
+            fmt::format("could not reach daemon at {} ({}) — is `vectra serve` running?",
+                        ep.base,
+                        httplib::to_string(res.error())));
+    }
+    if (res->status != 200) {
+        throw std::runtime_error(
+            fmt::format("daemon returned {}: {}", res->status, res->body));
+    }
+
+    nlohmann::json body;
+    try {
+        body = nlohmann::json::parse(res->body);
+    } catch (const std::exception& e) {
+        throw std::runtime_error(
+            fmt::format("daemon response was not valid JSON: {}", e.what()));
+    }
+
+    if (!body.contains("chunks") || !body["chunks"].is_array()) {
+        throw std::runtime_error("daemon response missing 'chunks' array");
+    }
+    took_ms_out = body.value("took_ms", static_cast<std::int64_t>(0));
+
+    std::vector<ContextChunk> out;
+    out.reserve(body["chunks"].size());
+    for (const auto& c : body["chunks"]) {
+        ContextChunk cc;
+        cc.file_path = c.value("file", "");
+        cc.start_line = c.value("start_line", 0);
+        cc.end_line = c.value("end_line", 0);
+        cc.symbol = c.value("symbol", "");
+        cc.kind = c.value("kind", "");
+        cc.text = c.value("text", "");
+        out.push_back(std::move(cc));
+    }
+    return out;
 }
 
 // Emit the stream-json `vectra_event/context` line on stdout
@@ -149,24 +230,56 @@ int run_ask(const AskOptions& opts) {
         resolved.claude_extra_args = project_cfg.claude_extra_args;
     }
 
-    // ---- index -------------------------------------------------------
-    const auto db_path = resolve_db(repo_root, resolved.db);
-    {
-        std::error_code ec;
-        if (!fs::exists(db_path, ec)) {
-            fmt::print(stderr,
-                       "error: index not found at {}.\n"
-                       "       run `vectra index <root>` first to create one.\n",
-                       db_path.string());
-            return 1;
-        }
-    }
-
-    auto store = store::Store::open(db_path);
     fmt::print(stderr, "project: {}\n", repo_root.string());
-    fmt::print(stderr, "index:   {}\n", db_path.string());
 
-    retrieve::Retriever retriever(store);
+    // ---- daemon shortcut ---------------------------------------------
+    // When --daemon-url is set we skip the store/embedder/reranker
+    // setup entirely and POST the retrieval to a long-running
+    // `vectra serve`. The daemon owns the index file; we just
+    // forward the task and consume the chunks. Everything below the
+    // retrieval phase (prompt composition, claude spawn) is shared.
+    PromptComposition comp;
+    comp.task = task;
+    // Plan-mode is read-only by definition — claude can't edit, so
+    // the SCOPE / TOOL-ORDER invariants would just burn ~250 tokens
+    // per call for nothing. Skip them in that mode; keep them on
+    // for the edit modes where they actually steer claude.
+    comp.include_edit_invariants = (resolved.claude_permission_mode != "plan");
+
+    if (!resolved.daemon_url.empty()) {
+        const auto ep = parse_daemon_url(resolved.daemon_url);
+        fmt::print(stderr, "daemon:  {} (no in-process index/embedder)\n", ep.base);
+        std::int64_t took_ms = 0;
+        auto chunks = fetch_from_daemon(ep, task, resolved.k, took_ms);
+        fmt::print(stderr,
+                   "context: {} chunk{} retrieved [daemon {} ms]\n",
+                   chunks.size(),
+                   chunks.size() == 1 ? "" : "s",
+                   took_ms);
+        comp.context = std::move(chunks);
+    } else {
+        // ---- index ----
+        const auto db_path = resolve_db(repo_root, resolved.db);
+        {
+            std::error_code ec;
+            if (!fs::exists(db_path, ec)) {
+                fmt::print(stderr,
+                           "error: index not found at {}.\n"
+                           "       run `vectra index <root>` first to create one.\n",
+                           db_path.string());
+                return 1;
+            }
+        }
+
+        // Vector search is only used when an embedding model is set;
+        // skipping the in-memory HNSW rebuild on a hybrid-indexed DB
+        // saves multiple minutes of startup on every symbol-only ask.
+        store::Store::OpenOptions store_opts;
+        store_opts.skip_vector_index = resolved.model.empty();
+        auto store = store::Store::open(db_path, store_opts);
+        fmt::print(stderr, "index:   {}\n", db_path.string());
+
+        retrieve::Retriever retriever(store);
 
 #if VECTRA_HAS_EMBED
     std::unique_ptr<embed::Embedder> embedder;
@@ -230,6 +343,12 @@ int run_ask(const AskOptions& opts) {
     // ---- retrieve ----------------------------------------------------
     retrieve::RetrieveOptions r_opts;
     r_opts.k = resolved.k;
+    // Trim the chunk count when the score gradient is steep
+    // (rank-0 dominates → 1-2 chunks usually). On slam-dunk
+    // queries this cuts claude's input tokens dramatically;
+    // on broad queries the gradient is gentle and we still
+    // return the full opts.k.
+    r_opts.adaptive_k = true;
     if (!resolved.quiet) {
         // Per-stage timing surfaces where wall-clock time goes
         // (model load happens before this, but everything inside
@@ -245,23 +364,22 @@ int run_ask(const AskOptions& opts) {
             };
         fmt::print(stderr, "retrieval pipeline:\n");
     }
-    const auto retrieve_start = std::chrono::steady_clock::now();
-    const auto hits = retriever.retrieve(task, r_opts);
-    const auto retrieve_total = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - retrieve_start);
+        const auto retrieve_start = std::chrono::steady_clock::now();
+        const auto hits = retriever.retrieve(task, r_opts);
+        const auto retrieve_total = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - retrieve_start);
 
-    PromptComposition comp;
-    comp.task = task;
-    comp.context.reserve(hits.size());
-    for (const auto& h : hits) {
-        comp.context.push_back(to_chunk(h));
-    }
+        comp.context.reserve(hits.size());
+        for (const auto& h : hits) {
+            comp.context.push_back(to_chunk(h));
+        }
 
-    fmt::print(stderr,
-               "context: {} chunk{} retrieved [total {} ms]\n",
-               comp.context.size(),
-               comp.context.size() == 1 ? "" : "s",
-               retrieve_total.count());
+        fmt::print(stderr,
+                   "context: {} chunk{} retrieved [total {} ms]\n",
+                   comp.context.size(),
+                   comp.context.size() == 1 ? "" : "s",
+                   retrieve_total.count());
+    }  // end in-process retrieval branch
 
     const auto prompt = compose_prompt(comp);
 

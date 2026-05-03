@@ -68,6 +68,30 @@ struct RetrieveOptions {
     double vector_weight = 1.0;
     double symbol_weight = 1.0;
 
+    // When true, the retriever inspects the FTS5 BM25 score
+    // distribution and, if the rank-0 hit is "dominant" (clearly
+    // better than rank-1 by `dominance_ratio`), pins that chunk
+    // into the top-K regardless of how the vector channel ranks
+    // it. Fixes a measured regression where hybrid retrieval with
+    // an embedder *dilutes* a strong FTS5 match — the bench data
+    // showed `executor-registry` queries going from 17 s on
+    // symbol-only to 59 s on hybrid because the right chunk got
+    // dropped by RRF dilution. Defaults to true; set to false to
+    // get the un-protected fusion behaviour.
+    bool protect_dominant_symbol_hit = true;
+    double symbol_dominance_ratio = 1.5;
+
+    // Adaptive top-K: cap the returned hit count by *score gradient*
+    // instead of taking exactly `k`. If the fused-score drop from
+    // rank-N to rank-N+1 is steep (rank-N+1 < rank-N * cliff_ratio),
+    // we stop. Bounded by [min_k, k] so degenerate gradients still
+    // give the caller something to work with. Off by default
+    // because callers that already know the right K (the VS Code
+    // chat panel passes 8) shouldn't have it second-guessed.
+    bool adaptive_k = false;
+    std::size_t min_k = 2;
+    double adaptive_cliff_ratio = 0.55;
+
     // Optional progress callback invoked after each retrieval stage
     // completes. `name` is a short human label (e.g. "symbol search",
     // "embed query"); `count` is the stage's primary count metric

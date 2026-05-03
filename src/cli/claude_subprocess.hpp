@@ -42,6 +42,15 @@ struct ContextChunk {
 struct PromptComposition {
     std::string task;
     std::vector<ContextChunk> context;
+
+    // When true (default), prepend the SCOPE / TOOL-ORDER invariants
+    // before the context blocks. Those invariants tell Claude to
+    // call Read before Edit and to scope changes to the task's
+    // named files — relevant when claude is allowed to edit. For
+    // plan-mode / read-only research questions they are pure noise
+    // and waste ~250 tokens on every call. Toggle off when the
+    // surrounding `vectra ask` is in `--permission-mode plan`.
+    bool include_edit_invariants = true;
 };
 
 // Build the prompt that gets fed to `claude -p`. Plain-text task

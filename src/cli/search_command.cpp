@@ -74,7 +74,12 @@ int run_search(const SearchOptions& opts) {
     }
 
     const auto db_path = resolve_db(opts.db);
-    auto store = store::Store::open(db_path);
+    // Skip the HNSW rebuild on open when we know we won't vector-search
+    // — same optimization as ask_command, important on hybrid-indexed
+    // DBs where the rebuild dominates startup.
+    store::Store::OpenOptions store_opts;
+    store_opts.skip_vector_index = opts.model.empty();
+    auto store = store::Store::open(db_path, store_opts);
     fmt::print(stderr, "index: {}\n", db_path.string());
 
     retrieve::Retriever retriever(store);

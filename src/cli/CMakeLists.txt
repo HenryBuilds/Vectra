@@ -8,12 +8,30 @@ add_executable(vectra
     main.cpp
     project_config.cpp
     search_command.cpp
+    serve_command.cpp
     walker.cpp
 )
 
 target_include_directories(vectra
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR})
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        # cpp-httplib is vendored as a single header at
+        # third_party/httplib.h; only `vectra serve` and the daemon
+        # client in `vectra ask` include it, so we keep the include
+        # private to this target.
+        ${CMAKE_SOURCE_DIR}/third_party
+        # nlohmann::json comes for free via llama.cpp's vendor tree;
+        # we re-use it here for the daemon-client JSON parse instead
+        # of taking another single-header dep.
+        ${CMAKE_SOURCE_DIR}/third_party/llama.cpp/vendor)
+
+# httplib includes <winsock2.h> on Windows. Without WIN32_LEAN_AND_MEAN
+# (already set at the project level) winsock2.h conflicts with
+# windows.h's earlier-include of winsock1, and we'd lose to the
+# include-order lottery in main.cpp.
+if(WIN32)
+    target_link_libraries(vectra PRIVATE ws2_32)
+endif()
 
 target_link_libraries(vectra
     PRIVATE
