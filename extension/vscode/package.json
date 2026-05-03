@@ -63,6 +63,11 @@
           "light": "media/icon.svg",
           "dark": "media/icon.svg"
         }
+      },
+      {
+        "command": "vectra.manageAllowList",
+        "title": "Vectra: Manage always-allow rules",
+        "category": "Vectra"
       }
     ],
     "menus": {

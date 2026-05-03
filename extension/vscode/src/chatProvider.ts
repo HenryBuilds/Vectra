@@ -33,6 +33,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
+import { AllowList } from './allowList';
 import { ChatStorage, relativeTime } from './chatStorage';
 import { checkToolPath } from './pathPolicy';
 import type { PermissionBridge, PermissionRequest } from './permissionBridge';
@@ -84,6 +85,11 @@ interface PermissionResponseMessage {
     requestId: string;
     decision: 'allow' | 'deny';
     reason?: string;
+    // Set by the webview when the user clicked "Always allow" so
+    // future requests matching the same shape skip the modal. The
+    // host derives the actual pattern from the live tool input;
+    // the webview only signals intent.
+    alwaysAllow?: boolean;
 }
 
 interface MessageAction {
@@ -112,9 +118,18 @@ export class VectraChatPanel {
     private readonly extensionUri: vscode.Uri;
     private readonly storage: ChatStorage;
     private readonly bridge: PermissionBridge;
+    private readonly allowList: AllowList | undefined;
     private readonly output: vscode.OutputChannel;
     private readonly disposables: vscode.Disposable[] = [];
     private readonly active = new Map<string, cp.ChildProcess>();
+    // In-flight permission requests, keyed by requestId. Stash the
+    // raw tool input so we can derive an always-allow pattern from
+    // the request the user actually approved — the webview only
+    // signals intent, not the pattern itself.
+    private readonly pendingApprovals = new Map<
+        string,
+        { toolName: string; toolInput: unknown }
+    >();
     // Temp files (MCP config) we wrote for in-flight runs. Cleaned
     // up when each child exits; force-removed on dispose.
     private readonly tempFiles = new Set<string>();
@@ -134,6 +149,7 @@ export class VectraChatPanel {
         extensionUri: vscode.Uri,
         storage: ChatStorage,
         bridge: PermissionBridge,
+        allowList: AllowList | undefined,
         output: vscode.OutputChannel,
     ): void {
         const column = vscode.ViewColumn.Beside;
@@ -165,6 +181,7 @@ export class VectraChatPanel {
             extensionUri,
             storage,
             bridge,
+            allowList,
             output,
         );
     }
@@ -182,12 +199,14 @@ export class VectraChatPanel {
         extensionUri: vscode.Uri,
         storage: ChatStorage,
         bridge: PermissionBridge,
+        allowList: AllowList | undefined,
         output: vscode.OutputChannel,
     ) {
         this.panel = panel;
         this.extensionUri = extensionUri;
         this.storage = storage;
         this.bridge = bridge;
+        this.allowList = allowList;
         this.output = output;
 
         this.panel.webview.html = this.renderHtml(this.panel.webview);
@@ -202,13 +221,19 @@ export class VectraChatPanel {
         // request to the chat panel as a permissionRequest message.
         // The webview owns the modal queue; we just route.
         //
-        // Path-policy gate: any path-bearing tool call (Edit / Write
-        // / MultiEdit / NotebookEdit) is resolved against the active
-        // workspace root before we even show the modal. Outside-the-
-        // workspace requests are auto-denied with a chat-visible
-        // explanation, so the user can never accidentally rubber-
-        // stamp an edit to /etc/* or %WINDIR%\System32 by clicking
-        // through the dialog too quickly.
+        // Two gates run in order before the modal is shown:
+        //
+        //   1. Path-policy. Edit / Write / MultiEdit / NotebookEdit
+        //      paths must resolve inside the workspace root. Outside-
+        //      the-workspace paths are auto-denied with a chat-
+        //      visible explanation. This guard cannot be opted out
+        //      of — it is the floor for *every* approval.
+        //
+        //   2. AllowList. Once the path-policy floor is held, the
+        //      request is matched against the user's persisted
+        //      "always allow" entries. A hit auto-approves silently
+        //      (the user already said yes the first time); a miss
+        //      forwards to the modal.
         this.bridge.setListener((req: PermissionRequest) => {
             const verdict = checkToolPath(req.toolName, req.toolInput, this.workspaceRoot());
             if (verdict.kind === 'deny') {
@@ -241,6 +266,25 @@ export class VectraChatPanel {
                 return;
             }
 
+            if (this.allowList?.matches(req.toolName, req.toolInput)) {
+                this.output.appendLine(
+                    `[chat] auto-allow ${req.requestId} tool=${req.toolName} — matches always-allow rule`,
+                );
+                this.bridge.resolve(req.requestId, {
+                    decision: 'allow',
+                    reason: 'always-allow rule matched',
+                });
+                return;
+            }
+
+            // Stash the live tool input so the always-allow path on
+            // the response handler can derive its own pattern. The
+            // webview never sees the resolved pattern; only intent.
+            this.pendingApprovals.set(req.requestId, {
+                toolName: req.toolName,
+                toolInput: req.toolInput,
+            });
+
             this.output.appendLine(
                 `[chat] forwarding approval ${req.requestId} tool=${req.toolName} → webview`,
             );
@@ -269,6 +313,7 @@ export class VectraChatPanel {
         // Force-deny any in-flight approvals so the bridge does not
         // hold their HTTP responses open after the panel is gone.
         this.bridge.denyAll('vectra chat panel closed');
+        this.pendingApprovals.clear();
         // Best-effort cleanup of any stale MCP config files we left
         // lying around (proc 'close' handler already nukes the
         // common path; this catches the cases where the child died
@@ -431,10 +476,21 @@ export class VectraChatPanel {
             case 'saveSession':
                 void this.handleSaveSession(m);
                 break;
-            case 'permissionResponse':
+            case 'permissionResponse': {
                 this.output.appendLine(
-                    `[chat] decision from webview ${m.requestId} → ${m.decision}`,
+                    `[chat] decision from webview ${m.requestId} → ${m.decision}` +
+                        (m.alwaysAllow ? ' (always allow)' : ''),
                 );
+
+                // Persist an always-allow rule first so a fast
+                // follow-up tool call from claude can match it
+                // before the resolve() below has even round-tripped
+                // through the MCP server.
+                if (m.alwaysAllow && m.decision === 'allow') {
+                    void this.persistAlwaysAllow(m.requestId);
+                }
+
+                this.pendingApprovals.delete(m.requestId);
                 this.bridge.resolve(m.requestId, {
                     decision: m.decision,
                     reason:
@@ -442,6 +498,7 @@ export class VectraChatPanel {
                         (m.decision === 'allow' ? 'user approved' : 'user denied'),
                 });
                 break;
+            }
         }
     }
 
@@ -517,6 +574,47 @@ export class VectraChatPanel {
 
     private workspaceRoot(): string | undefined {
         return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    }
+
+    /**
+     * Take the stashed tool input for an in-flight approval and
+     * derive an always-allow pattern from it, then persist. The
+     * webview only signals intent; the actual scope (path, command
+     * prefix, or '*') comes from what claude actually sent.
+     */
+    private async persistAlwaysAllow(requestId: string): Promise<void> {
+        if (!this.allowList) {
+            this.output.appendLine(
+                `[allow-list] cannot persist — no workspace folder is open`,
+            );
+            return;
+        }
+        const live = this.pendingApprovals.get(requestId);
+        if (!live) {
+            this.output.appendLine(
+                `[allow-list] cannot persist for ${requestId} — request input no longer in memory`,
+            );
+            return;
+        }
+        const pattern = this.allowList.suggestPattern(live.toolName, live.toolInput);
+        if (!pattern) {
+            this.output.appendLine(
+                `[allow-list] could not derive a pattern for ${live.toolName}; not persisting`,
+            );
+            return;
+        }
+        await this.allowList.add({ toolName: live.toolName, pattern });
+        this.output.appendLine(
+            `[allow-list] added ${live.toolName}: ${pattern}`,
+        );
+        this.post({
+            type: 'meta',
+            id: 'global',
+            text:
+                `vectra: future ${live.toolName} requests matching '${pattern}' ` +
+                `will skip the approval modal. Manage with the "Vectra: Manage ` +
+                `always-allow rules" command.\n`,
+        });
     }
 
     private handleSend(m: SendMessage): void {
@@ -661,6 +759,7 @@ export class VectraChatPanel {
             // resolving a now-dead HTTP holder).
             this.removeTempFile(mcpConfigPath);
             this.bridge.denyAll('claude run ended before approval');
+            this.pendingApprovals.clear();
             const exit = code ?? 0;
 
             // Pattern-match common Vectra errors and surface a

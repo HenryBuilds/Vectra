@@ -22,7 +22,7 @@ import type { PermissionRequest } from './types';
 
 interface PermissionModalProps {
     request: PermissionRequest;
-    onApprove(): void;
+    onApprove(opts?: { alwaysAllow?: boolean }): void;
     onDeny(): void;
 }
 
@@ -318,6 +318,35 @@ function approveLabel(toolName: string): string {
     }
 }
 
+// One-line description of the always-allow scope so the user knows
+// what they are signing up for before they click. The host picks
+// the canonical pattern from the live tool input — what we render
+// here is a faithful preview of the same logic in allowList.ts so
+// the click is informed.
+function alwaysAllowHint(toolName: string, toolInput: unknown): string | null {
+    if (typeof toolInput !== 'object' || toolInput === null) return null;
+    const o = toolInput as Record<string, unknown>;
+    if (toolName === 'Edit' || toolName === 'Write' || toolName === 'MultiEdit') {
+        const p = pickString(o, 'file_path', 'filePath', 'path');
+        if (!p) return null;
+        return `every future ${toolName} on ${p}`;
+    }
+    if (toolName === 'NotebookEdit') {
+        const p = pickString(o, 'notebook_path', 'notebookPath');
+        if (!p) return null;
+        return `every future NotebookEdit on ${p}`;
+    }
+    if (toolName === 'Bash') {
+        const cmd = pickString(o, 'command', 'cmd');
+        if (!cmd) return null;
+        const tokens = cmd.trim().split(/\s+/).filter((t) => t.length > 0);
+        const prefix =
+            tokens.length === 0 ? '' : tokens.length === 1 ? tokens[0] : `${tokens[0]} ${tokens[1]}`;
+        return `every future Bash starting with '${prefix}'`;
+    }
+    return `every future ${toolName} call`;
+}
+
 // Age counter displayed in the modal header. The bridge auto-denies
 // after 90s so the user knows there is a deadline; rendering the
 // elapsed seconds plays the same role as Claude Code's own
@@ -335,6 +364,7 @@ function useElapsedSeconds(): number {
 
 export function PermissionModal({ request, onApprove, onDeny }: PermissionModalProps) {
     const seconds = useElapsedSeconds();
+    const alwaysHint = alwaysAllowHint(request.toolName, request.toolInput);
     return (
         <div className="permission-modal" role="dialog" aria-modal="true">
             <div className="permission-header">
@@ -349,10 +379,20 @@ export function PermissionModal({ request, onApprove, onDeny }: PermissionModalP
                 <button type="button" className="permission-btn deny" onClick={onDeny}>
                     Deny
                 </button>
+                {alwaysHint !== null && (
+                    <button
+                        type="button"
+                        className="permission-btn always"
+                        onClick={() => onApprove({ alwaysAllow: true })}
+                        title={`Approve and allow ${alwaysHint} without asking again. Manage from the "Vectra: Manage always-allow rules" command.`}
+                    >
+                        Always allow
+                    </button>
+                )}
                 <button
                     type="button"
                     className="permission-btn approve"
-                    onClick={onApprove}
+                    onClick={() => onApprove()}
                     autoFocus
                 >
                     {approveLabel(request.toolName)}

@@ -947,6 +947,17 @@ button.source-item:focus {
     background: var(--vscode-toolbar-hoverBackground);
 }
 
+.permission-btn.always {
+    background: transparent;
+    color: var(--vscode-foreground);
+    border-color: var(--vscode-button-secondaryBackground, var(--vscode-panel-border));
+}
+
+.permission-btn.always:hover {
+    background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+    color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+}
+
 .permission-btn.approve {
     background: var(--vscode-button-background);
     color: var(--vscode-button-foreground);

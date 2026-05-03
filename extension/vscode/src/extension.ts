@@ -15,6 +15,7 @@
 import * as cp from 'child_process';
 import * as vscode from 'vscode';
 
+import { AllowList } from './allowList';
 import { AutoIndexer } from './autoIndexer';
 import { ChatStorage } from './chatStorage';
 import { VectraChatPanel } from './chatProvider';
@@ -376,6 +377,13 @@ export function activate(context: vscode.ExtensionContext): void {
         );
     });
 
+    // AllowList: persistent "always allow" entries scoped to this
+    // workspace. Constructed only when a workspace is open — without
+    // a root we have nothing meaningful to scope path patterns
+    // against, and the chat panel will refuse every approval anyway.
+    const cwd = workspaceRoot();
+    const allowList = cwd ? new AllowList(context.workspaceState, cwd) : undefined;
+
     context.subscriptions.push(
         output,
         bridge,
@@ -392,8 +400,11 @@ export function activate(context: vscode.ExtensionContext): void {
             VectraChatPanel.showHistory(),
         ),
         vscode.commands.registerCommand('vectra.openChat', () => {
-            VectraChatPanel.createOrShow(context.extensionUri, storage, bridge, output);
+            VectraChatPanel.createOrShow(context.extensionUri, storage, bridge, allowList, output);
         }),
+        vscode.commands.registerCommand('vectra.manageAllowList', () =>
+            commandManageAllowList(allowList, output),
+        ),
     );
 
     // Auto-indexer: only meaningful when there is a workspace folder.
@@ -402,10 +413,69 @@ export function activate(context: vscode.ExtensionContext): void {
     // projects; here we just stand the watcher up. Projects without a
     // workspace folder still get the manual `vectra.ask` and
     // `vectra.index` commands.
-    const cwd = workspaceRoot();
     if (cwd) {
         const autoIndexer = new AutoIndexer(cwd, output, () => readSettings().binary);
         context.subscriptions.push(autoIndexer);
+    }
+}
+
+// Surface the persisted always-allow entries for the active workspace
+// in a QuickPick. Picking an entry offers to remove it; picking the
+// "Clear all entries" item resets the list. The command is the only
+// way to undo a click on "Always allow" in the modal, short of
+// editing workspaceState by hand.
+async function commandManageAllowList(
+    allowList: AllowList | undefined,
+    output: vscode.OutputChannel,
+): Promise<void> {
+    if (!allowList) {
+        void vscode.window.showInformationMessage(
+            'Vectra: open a workspace folder to manage always-allow rules.',
+        );
+        return;
+    }
+    const entries = allowList.list();
+    if (entries.length === 0) {
+        void vscode.window.showInformationMessage(
+            'Vectra: no always-allow rules saved for this workspace yet.',
+        );
+        return;
+    }
+
+    type Item = vscode.QuickPickItem & { action: 'remove' | 'clear'; index?: number };
+    const items: Item[] = entries.map((e, index) => ({
+        label: `${e.toolName}: ${e.pattern}`,
+        description: 'remove this rule',
+        action: 'remove',
+        index,
+    }));
+    items.push({ label: 'Clear all entries', description: 'reset to empty', action: 'clear' });
+
+    const picked = await vscode.window.showQuickPick(items, {
+        title: 'Vectra: always-allow rules for this workspace',
+        placeHolder: 'pick a rule to remove, or clear everything',
+    });
+    if (!picked) return;
+
+    if (picked.action === 'clear') {
+        const confirm = await vscode.window.showWarningMessage(
+            `Remove all ${entries.length} always-allow rules?`,
+            { modal: true },
+            'Clear',
+        );
+        if (confirm !== 'Clear') return;
+        await allowList.clear();
+        output.appendLine(`[allow-list] cleared all ${entries.length} entries`);
+        void vscode.window.showInformationMessage('Vectra: always-allow rules cleared.');
+        return;
+    }
+
+    if (picked.action === 'remove' && typeof picked.index === 'number') {
+        const target = entries[picked.index];
+        await allowList.remove(target);
+        output.appendLine(
+            `[allow-list] removed ${target.toolName}: ${target.pattern}`,
+        );
     }
 }
 

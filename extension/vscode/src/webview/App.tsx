@@ -430,15 +430,18 @@ export function App() {
     // Settle the head of the permission queue. Posts the user's
     // decision to the host (which lets the bridge HTTP response
     // through) and shifts the head off so the next modal — if any
-    // — slides in.
+    // — slides in. The `alwaysAllow` flag is set when the user
+    // clicked "Always allow" so the host persists a matching rule.
     const handlePermissionDecision = (
         request: PermissionRequest,
         decision: 'allow' | 'deny',
+        opts?: { alwaysAllow?: boolean },
     ) => {
         host.postMessage({
             type: 'permissionResponse',
             requestId: request.requestId,
             decision,
+            alwaysAllow: opts?.alwaysAllow === true ? true : undefined,
         });
         setPendingPermissions((q) => q.filter((r) => r.requestId !== request.requestId));
     };
@@ -477,7 +480,9 @@ export function App() {
             {pendingPermissions.length > 0 && (
                 <PermissionModal
                     request={pendingPermissions[0]}
-                    onApprove={() => handlePermissionDecision(pendingPermissions[0], 'allow')}
+                    onApprove={(opts) =>
+                        handlePermissionDecision(pendingPermissions[0], 'allow', opts)
+                    }
                     onDeny={() => handlePermissionDecision(pendingPermissions[0], 'deny')}
                 />
             )}
