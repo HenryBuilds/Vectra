@@ -1,0 +1,9 @@
+**File:** `server/routers/ai-flow-builder.ts` (the `aiFlowBuilder.generateFlow` tRPC mutation, called from `components/ai-flow-builder-panel.tsx`).
+
+**Providers supported for generation:** OpenAI (`gpt-4o-mini`), Anthropic (`claude-sonnet-4-20250514`), and Google (`gemini-2.0-flash`). It picks whichever credential the organization has, in that priority order (`server/routers/ai-flow-builder.ts:87-109`).
+
+This is a Q&A — no implementation needed, so nothing to plan or change.
+Per the ExitPlanMode docs, this tool is only for implementation tasks — for a research/lookup question like yours, I shouldn't call it. The answer above stands:
+
+- **File:** `server/routers/ai-flow-builder.ts`
+- **Providers:** OpenAI, Anthropic, Google (selected in that priority from the org's stored credentials)

@@ -1,0 +1,11 @@
+I'll verify the sandbox implementation before writing the answer.
+Direct answer to your question:
+
+- **File**: `server/services/sandbox.ts`
+- **Entry function**: `executeInSandbox` (line 289)
+- **Isolation primitive**: Node.js built-in `vm` module — `new vm.Script(...)` compiled, then `script.runInContext(context, { timeout, breakOnSigint })`
+
+The companion `createSandboxContext` in the same file builds the locked-down `vm.Context` with a `require` shim that rejects a blocklist of Node built-ins (`fs`, `net`, `child_process`, `process`, `vm`, `worker_threads`, etc., plus `node:`-prefixed variants — `server/services/sandbox.ts:24-50`).
+
+Worth flagging: the file's own header (lines 8–10) explicitly notes that Node's `vm` is **not a hard security boundary** and recommends `isolated-vm` or containers for genuinely untrusted code. The current sandbox blocks common escape vectors but isn't process-level isolation.
+The answer is delivered above. Per `ExitPlanMode`'s own guidance, that tool is for implementation plans, not research questions — so I'm leaving plan mode untouched. Nothing further to do.

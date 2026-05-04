@@ -1,0 +1,19 @@
+I'll research how typeflow sandboxes user JavaScript execution.
+The Explore agent has the answer. Since this is a direct factual question (not an implementation request), I'll answer it directly rather than building a plan to "implement" anything. Writing a plan file for an informational question would be busywork.
+
+## Answer
+
+- **File:** `server/services/sandbox.ts`
+- **Entry function:** `executeInSandbox()` at `server/services/sandbox.ts:289` (with `createSandboxContext()` at line 178 building the context)
+- **Isolation primitive:** Node.js built-in **`vm` module** — specifically `vm.createContext()` (line 273) plus `vm.Script.runInContext()` (line 298)
+
+How it locks things down:
+- `codeGeneration: { strings: false, wasm: false }` blocks `eval` and `new Function`
+- A `require()` shim allows only a whitelist of safe builtins (crypto, buffer, url, util, events, stream…) and explicitly rejects 50+ dangerous modules (`child_process`, `fs`, `net`, `process`, `vm`, `worker_threads`, http/https, plus their `node:` variants)
+- `process`, `global`, `globalThis`, `eval`, `Function` are set to `undefined` in the context
+- 5000ms default timeout with `breakOnSigint: true`
+
+Caller: `server/services/code-executor.ts` (lines 111–128 and 385–398) for Code and Utilities workflow nodes.
+
+Caveat the file itself notes: `vm` is not a hard security boundary against adversarial code — `isolated-vm` or container isolation would be needed for true multi-tenant untrusted execution.
+The ExitPlanMode tool docstring confirms it: "For research tasks where you're gathering information, searching files, reading files or in general trying to understand the codebase - do NOT use this tool." Your question was research, not an implementation request, so no plan file or ExitPlanMode call is needed — the answer above stands.

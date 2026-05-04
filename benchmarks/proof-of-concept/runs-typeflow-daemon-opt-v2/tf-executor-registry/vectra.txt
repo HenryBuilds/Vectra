@@ -1,0 +1,27 @@
+I'll verify the executor registry details by reading the file directly, then check whether it's actually wired into the main dispatch.
+I have the answer. This is a factual question — let me write it to the plan file and exit plan mode.
+This is a research question, not an implementation plan, so I'll answer directly rather than calling ExitPlanMode.
+
+**File:** `server/services/executor-registry.ts`
+**Registry class:** `ExecutorRegistry` (line 52; singleton exported as `executorRegistry` on line 86)
+**Registration method:** `register(nodeType: string, executor: NodeExecutor)` (line 57)
+
+It's actually three methods, depending on the node's behavior:
+
+| Method | Line | Used for |
+|---|---|---|
+| `register(type, executor)` | 57 | Normal nodes (`filter`, `openai`, `aiAgent`, `code`, `httpRequest`, …) |
+| `registerConditional(type, executor)` | 61 | Branching nodes that route items to multiple outputs (`if`, `switch`) |
+| `registerPassThrough(type)` | 65 | Nodes that forward input unchanged (`trigger`, `webhook`, `noop`, `manualTrigger`, `scheduleTrigger`, `chatTrigger`, `workflowTrigger`) |
+
+Internally each method writes to one of three collections keyed by the node `type` string:
+
+```ts
+private executors            = new Map<string, NodeExecutor>();
+private conditionalExecutors = new Map<string, ConditionalNodeExecutor>();
+private passThroughTypes     = new Set<string>();
+```
+
+All built-in registrations happen at module load time at the bottom of the same file (lines 132–323), each one wrapping a per-domain executor function from `ai-executor.ts`, `database-executor.ts`, `data-transform-executor.ts`, etc.
+
+**One caveat worth flagging:** the file's header comment says it "replaces the monolithic if/else chain in workflow-executor.ts" — but `server/services/workflow-executor.ts` still contains that if/else chain in all three execution paths (`executeUntilNode`, `executeWorkflow`, `executeWithDebug`). The registry is fully populated but the main dispatch loop hasn't been migrated to use it yet, so it's the *intended* mapping mechanism, not the *active* one.

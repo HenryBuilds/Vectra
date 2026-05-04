@@ -1,0 +1,22 @@
+Let me verify the key files directly before writing the plan.
+The procedure builder for protected, organization-scoped endpoints is **`organizationProcedure`**, defined in `server/trpc.ts:47-88`.
+
+Enforcement chain:
+
+1. **Context** (`server/context.ts:11-29`) — reads the `token` cookie, runs `verifyToken()` from `lib/jwt`, and puts `userId` (or `null`) plus `clientIp` on `ctx`.
+
+2. **`publicProcedure`** (`server/trpc.ts:11`) — bare `t.procedure`, no checks.
+
+3. **`protectedProcedure`** (`server/trpc.ts:27-43`) — composes two middleware:
+   - `rateLimitMiddleware` calls `apiRateLimiter.check(ctx.clientIp)`, throws `TOO_MANY_REQUESTS`.
+   - Auth check throws `UNAUTHORIZED` if `ctx.userId` is null and narrows it to `string` for downstream resolvers.
+
+4. **`organizationProcedure`** (`server/trpc.ts:47-88`) — extends `protectedProcedure` and adds:
+   - A required input shape `z.object({ organizationId: z.string().uuid() })`, so every org-scoped call must carry `organizationId`.
+   - An `organizations.findFirst` lookup → `NOT_FOUND` if missing.
+   - An `organizationMembers.findFirst` membership check (`organizationId` + `ctx.userId`) → `FORBIDDEN` if not a member.
+   - Enriches the context with `organization` and `membership` so resolvers (and role checks) don't re-query.
+
+That `UNAUTHORIZED` / `NOT_FOUND` branching the page in `app/organizations/[id]/page.tsx:53-59` reacts to is exactly what these two middleware throw.
+
+Full write-up saved to `C:\Users\German Classic\.claude\plans\task-how-is-authentication-witty-meteor.md`. (Skipping `ExitPlanMode` — its own description says not to use it for pure research questions.)

@@ -1,0 +1,8 @@
+This is a factual Q&A — the context already provides everything needed. Let me write a brief plan file with the answer and exit.
+Direct answer from the provided context:
+
+- **File:** `lib/queue/workflow-queue.ts`
+- **Adds a job to the queue:** `addWorkflowJob(data, options?)` — calls `queue.add("execute-workflow", data, { jobId, priority, delay })` (lines 43-58)
+- **Returns the singleton Queue instance:** `getWorkflowQueue()` — lazily constructs a `Queue<WorkflowJobData, WorkflowJobResult>` named `QUEUE_NAME` with a Redis connection from `getRedisConnection()` and caches it in the module-level `workflowQueue` variable (lines 9-35)
+
+Flow: a caller invokes `addWorkflowJob(...)` with a `WorkflowJobData` payload (`workflowId`, `organizationId`, `trigger`, optional `input`/`userId`/`webhookPath`); that helper calls `getWorkflowQueue()` and pushes an `"execute-workflow"` job, which is later picked up by `processWorkflowJob` in `workers/workflow-worker.ts`.

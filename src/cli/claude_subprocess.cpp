@@ -124,6 +124,16 @@ std::string compose_prompt(const PromptComposition& comp) {
 
     if (!comp.context.empty()) {
         out += '\n';
+        // NOTE: an earlier iteration here added a "every chunk is a
+        // complete symbol — don't re-Read for verification" hint on
+        // every prompt. Bench data showed it added prompt tokens
+        // without changing claude's behaviour (the bench-v2
+        // regression on typeflow tf-encryption / tf-sandbox /
+        // tf-executor-registry was largely traced to that hint
+        // plus an over-conservative adaptive_cliff_ratio). Keep
+        // the file lean here; if a future bench finds a place the
+        // hint genuinely helps, gate it on a flag instead of
+        // re-introducing it unconditionally.
         if (comp.include_edit_invariants) {
             out +=
                 "VECTRA INVARIANTS — read before acting:\n"

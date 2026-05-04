@@ -147,12 +147,20 @@ std::vector<Hit> Retriever::retrieve(std::string_view query, const RetrieveOptio
             }
         }
 
-        // Adaptive top-K: stop including chunks once the fused-score
-        // drop becomes a "cliff" (rank-N+1 < rank-N * cliff_ratio).
-        // Caps at [min_k, k]. Off by default — callers that already
-        // know the right K should not have it second-guessed.
+        // Adaptive top-K. Two conditions both have to hold before we
+        // trim below opts.k:
+        //   (a) `adaptive_k` is on (caller opted in)
+        //   (b) the FTS5 channel showed a *dominant* rank-0 hit
+        //       (same signal `protect_dominant_symbol_hit` uses)
+        // Without (b), the ranked list is "evenly informative" and
+        // the caller's k is the right size. The earlier behaviour
+        // (cliff_ratio alone) was too aggressive on queries with
+        // diffuse keyword matches: the typeflow workflow-queue and
+        // credential-decrypt tasks regressed +174% / +198% because
+        // adaptive_k cut chunks claude actually needed. Adding the
+        // dominance gate stops that without rolling the feature back.
         std::size_t cutoff = opts.k;
-        if (opts.adaptive_k && ranked.size() >= 2) {
+        if (opts.adaptive_k && !dominant_symbol_hash.empty() && ranked.size() >= 2) {
             std::size_t i = 1;
             for (; i < std::min(opts.k, ranked.size()); ++i) {
                 if (ranked[i - 1].second <= 0.0) break;  // can't compute ratio

@@ -1,0 +1,13 @@
+I'll verify the answer by inspecting the encryption module and then write up a brief findings file.
+Confirmed. Writing the answer to the plan file.
+## Answer
+
+The helper that decrypts credential payloads is **`decryptObject`** — exported from `lib/encryption.ts:71`. It's a typed wrapper around `decrypt()` (same file, line 40) that AES-256-GCM-decrypts the stored ciphertext (`iv:authTag:encryptedData`, hex-encoded) using the 32-byte key derived from `env.ENCRYPTION_KEY`, then `JSON.parse`s the plaintext.
+
+End-to-end, when the AI Flow Builder needs to call OpenAI/Anthropic:
+
+1. The AI executor (`server/services/ai/agent-executor.ts:118` `getApiKey`, or `server/services/ai/text-classifier-executor.ts:25` `getApiKeyAndModel`) receives the workflow's `organizationId` and the node's `credentialId`.
+2. It loads the row from the `credentials` table with a **compound** `WHERE id = credentialId AND organizationId = organizationId` — so a credential from another org can never be returned.
+3. The encrypted `cred.config` blob is passed through `decryptObject<{ apiKey: string; baseUrl?: string }>(cred.config)`.
+4. The plaintext `apiKey`/`baseUrl` is handed to `createOpenAI(...)`, `createAnthropic(...)`, `createGoogleGenerativeAI(...)`, etc.
+This was a research question, not an implementation task — per the ExitPlanMode tool's own guidance, I shouldn't call it here. The answer is above and recorded in the plan file: the helper is **`decryptObject`** in `lib/encryption.ts:71`.

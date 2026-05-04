@@ -1,0 +1,3 @@
+- **File:** `lib/queue/workflow-queue.ts`
+- **Function that adds a job to the queue:** `addWorkflowJob` (lib/queue/workflow-queue.ts:43) — calls `queue.add("execute-workflow", data, …)`
+- **Function that returns the singleton Queue instance:** `getWorkflowQueue` (lib/queue/workflow-queue.ts:9) — lazily constructs and caches a `new Queue<WorkflowJobData, WorkflowJobResult>("workflow-queue", …)` in a module-level `workflowQueue` variable, using `getRedisConnection()` from `lib/queue/connection.ts`.

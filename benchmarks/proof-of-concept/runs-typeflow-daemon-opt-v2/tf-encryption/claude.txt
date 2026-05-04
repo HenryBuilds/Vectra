@@ -1,0 +1,7 @@
+I have everything I need from the explore. This is a research question, so the "plan" is really a findings document — no implementation required.
+**Short answer:**
+
+- **Where:** `lib/encryption.ts` is the only encryption module. Credential `config` is encrypted by `encryptObject(...)` in `server/routers/credentials.ts:150-151` (create) and `:216-217` (update); decrypted in `server/services/credential-service.ts:309` and `server/routers/credentials.ts:124-125`. Stored in Postgres column `credentials.config` (jsonb) per `db/schema/credentials.ts:5-15`.
+- **Algorithm:** **AES-256-GCM** (`lib/encryption.ts:16`). 16-byte random IV per record, 16-byte auth tag, serialized as `iv:authTag:ciphertext` hex.
+- **Key source:** Env var **`ENCRYPTION_KEY`**, required by `lib/env.ts:23-25`. In `getEncryptionKey()` at `lib/encryption.ts:5-14`: if the value is 64 hex chars it's used directly as the 32-byte key; otherwise it's **SHA-256 hashed** to 32 bytes. No PBKDF2/scrypt/argon2 and no salt — strength relies on the entropy of `ENCRYPTION_KEY` itself.
+Research complete — answer is above and findings are recorded at `C:\Users\German Classic\.claude\plans\where-in-typeflow-are-bubbly-pike.md`. No implementation needed, so no plan-mode exit required.

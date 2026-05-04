@@ -1,0 +1,20 @@
+I'll research this read-only question about encryption-at-rest for credentials. Let me explore the key files in parallel.
+Let me verify the create/update site and env definition directly before finalizing.
+I have a complete picture. Writing the findings to the plan file.
+## Answer
+
+**Algorithm:** AES-256-GCM, with a fresh 16-byte random IV per ciphertext and a 16-byte GCM auth tag. Implementation in `lib/encryption.ts:16-38` (`ALGORITHM = 'aes-256-gcm'`, `crypto.createCipheriv` + `getAuthTag`). Output format: `"{iv_hex}:{authTag_hex}:{ciphertext_hex}"`. The object wrapper used for credential payloads is `encryptObject` (`lib/encryption.ts:67`), which `JSON.stringify`s first.
+
+**Where encryption happens (write path):** the tRPC `credentials` router is the single ingress.
+- `server/routers/credentials.ts:151` — `create` mutation: `const encryptedConfig = encryptObject(input.config)` → inserted into `credentials.config`.
+- `server/routers/credentials.ts:217` — `update` mutation: `updateData.config = encryptObject(input.config)` when config is changed.
+
+The plaintext `input.config` is Zod-validated but never persisted; only the ciphertext string is. The storage column is `db/schema/credentials.ts:12` — `config: jsonb("config").notNull()` (commented "encrypted connection details"; `jsonb` accepts the colon-delimited hex string as a JSON scalar).
+
+**Where the key comes from:**
+- `lib/env.ts:23-25` — `ENCRYPTION_KEY` is a required env var (Zod `string().min(1)`); the app `process.exit(1)`s at boot if missing.
+- `lib/encryption.ts:5-14` — `getEncryptionKey()` reads `env.ENCRYPTION_KEY`. If the value is exactly **64 hex chars** (32 raw bytes), it's used directly via `Buffer.from(key, 'hex')`. Otherwise it's stretched to 32 bytes via **SHA-256** (`crypto.createHash('sha256').update(key).digest()`).
+
+It's a single process-wide secret loaded from the environment at boot. There is **no per-tenant key, no KMS integration, and no rotation code** — despite `app/docs/credentials/page.tsx:165` claiming keys "are rotated regularly," nothing in the repo implements rotation. Decrypt sites (for context) include `server/services/ai/agent-executor.ts:118-141` and `server/services/ai/text-classifier-executor.ts:25-51`.
+
+Full write-up saved to `C:\Users\German Classic\.claude\plans\task-where-in-typeflow-federated-kahan.md`. Since this was a research question (no implementation), I'm not calling ExitPlanMode.
