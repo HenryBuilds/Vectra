@@ -11,6 +11,137 @@ mirror the package.json `version`, then tag.
 
 ## [Unreleased]
 
+## [0.7.0] – 2026-05-05
+
+This release turns Vectra from "smart wrapper around `claude -p`" into
+a measurably-faster code-RAG layer in front of Claude Code, backed by
+empirical bench data committed to the repo. Headline change: a long-
+running retrieval daemon (`vectra serve`) eliminates the per-call
+embedder cold-start that made hybrid retrieval a regression in 0.6.0,
+and a Store::open performance fix makes every CLI invocation 2400×
+faster on a hybrid-indexed database.
+
+Tier-A POC against typeflow (private TS / Next.js, ~70k LOC, n=7)
+puts the daemon-with-optimizations config at **−14 % wall-clock /
++6 % cost** versus Claude alone, with a tied 6/7 verifier hit rate.
+Mermaid charts at the top of the README front-load the data.
+
+### Added
+
+#### Daemon mode
+
+- New `vectra serve` subcommand. Holds the index, embedder, and
+  optional reranker in RAM and answers `POST /retrieve` over a
+  localhost HTTP socket. Built on a vendored `cpp-httplib` and the
+  `nlohmann::json` already shipped via `llama.cpp/vendor/`. Supports
+  `--port`, `--bind`, `--model`, `--reranker`, `--top-k`, `--quiet`.
+- `vectra ask --daemon-url http://127.0.0.1:7777` routes retrieval
+  through a running daemon instead of re-loading the embedder
+  in-process. Steady-state retrieval drops from `~30 s` (cold-start)
+  to `~60–100 ms`.
+- **Auto-discovery via `.vectra/daemon.json` PID file.** `vectra serve`
+  writes the bound port + pid + bind host on start; `vectra ask`
+  (and the VS Code extension) reads it and health-checks before
+  trusting the URL. No `--daemon-url` flag needed for the common
+  case. Stale PID files (force-killed daemon) are detected via a 1 s
+  health-check timeout and the call falls back to in-process
+  retrieval cleanly.
+- `SIGINT` / `SIGTERM` handlers in the daemon stop the listen loop
+  cleanly so the PID file is removed on graceful shutdown.
+
+#### Retrieval optimisations
+
+- **RRF dominance pin.** When FTS5 returns a clearly-dominant rank-0
+  hit (BM25 score at least 1.5× as good as rank-1's), that chunk is
+  forced into position 0 of the fused list regardless of where the
+  vector channel ranks it. Fixes the typeflow `executor-registry`
+  regression (59 s → 22 s) where RRF dilution was dropping the right
+  chunk out of the top-K.
+- **Adaptive top-K** with dominance gate. Trims the chunk count below
+  the requested `k` only when (a) the caller opts in AND (b) FTS5
+  showed a dominant rank-0. Cuts ~50 % of the input-token cost on
+  slam-dunk identifier queries; falls through to the full `k` on
+  diffuse queries where trimming would hurt.
+- **Plan-mode invariant skip.** `vectra ask --permission-mode plan`
+  no longer prepends the SCOPE / TOOL-ORDER invariants block to the
+  prompt; saves ~250 tokens per call on read-only research queries
+  where the invariants are not actionable anyway.
+
+#### Benchmarks (`benchmarks/proof-of-concept/`)
+
+- Cross-repo Tier-A POC against `kubernetes/kubernetes` (5M LOC, n=10)
+  and `typeflow` (70k LOC, n=7), with four retrieval configs:
+  symbol-only, embed (no daemon), daemon, daemon + optimisations.
+- Auto-graded `verify.must_contain` anchors in `tasks*.json` produce
+  pass/fail per pipeline without a human in the loop.
+- Idempotent harness (`run-poc.sh`) caches per-task NDJSON streams so
+  re-renders of `format-report.js` pull straight from disk; the
+  baseline-claude run is reused across vectra configs to keep token
+  spend down.
+- `runs-typeflow-daemon-opt-v2/` is committed as evidence of a failed
+  optimisation (cliff_ratio 0.55→0.35 + a Read-tool prompt hint that
+  Claude ignored) — kept in the repo so the lesson does not get
+  re-learned the hard way.
+
+#### README
+
+- New "Does it actually help?" section above the fold with two
+  mermaid `xychart-beta` per-task speedup charts (typeflow + kubernetes)
+  and a summary table. Caveats are in the same block — n is small,
+  edit-tasks have a separate (mixed) data set, both repos run in
+  plan mode.
+
+### Changed
+
+- `Store::open` now accepts `OpenOptions{ skip_vector_index: bool }`.
+  Hot paths that only do FTS5 retrieval (`vectra ask` symbol-only,
+  `vectra ask --print-prompt`, `vectra search`) opt out of the
+  `O(N log N)` HNSW rebuild that dominated startup on a hybrid-
+  indexed database. Measured fix: `vectra ask --print-prompt` on a
+  1.1 GB hybrid index drops from **348 s → 0.14 s**.
+- Vendored single-header dependencies (`httplib.h`, llama.cpp's
+  `nlohmann/json.hpp`) now come in via `target_include_directories(...
+  SYSTEM PRIVATE ...)` so the project's strict warning set
+  (`-Werror -Wold-style-cast -Wsign-conversion -Wshadow`) does not
+  apply to vendored code. Our own headers stay strict because the
+  regular `-I` precedes the SYSTEM one.
+- File-read in the daemon discovery path uses `rdbuf()` →
+  `stringstream::str()` instead of the `istreambuf_iterator`-pair
+  idiom; same semantics, but warning-clean under GCC 13's
+  `-Werror=null-dereference`.
+
+### Fixed
+
+- **`Store::open` HNSW rebuild on every CLI invocation.** Reading
+  every embedding row into the in-memory HNSW graph took 5+ minutes
+  on a kubernetes-scale hybrid index regardless of whether the
+  consumer was going to vector-search. Now skipped when not needed.
+- **vcpkg `sqlite3` port wrapper failure on Linux CI.** Newer port
+  versions ship a `share/sqlite3/vcpkg-cmake-wrapper.cmake` that
+  expects an upstream `SQLite3Config.cmake` the same port does not
+  install. Adds `cmake/sqlite3-shim/SQLite3Config.cmake` that
+  delegates to the `unofficial::sqlite3::sqlite3` target the port
+  actually exports, prepended to `CMAKE_PREFIX_PATH`.
+- A v2 retrieval-optimisation iteration regressed the typeflow
+  research bench (+20 % time / +36 % cost). Reverted: kept the
+  dominance-gate on `adaptive_k` (no measurable harm), restored
+  `cliff_ratio` to 0.55, and dropped the universal Read-tool prompt
+  hint Claude was ignoring.
+
+### Project / Release
+
+- Empirical evidence committed alongside the binary changes: every
+  retrieval optimisation in this release links to a per-task delta
+  in the typeflow bench. Future tuning rounds should re-run the
+  same harness and either commit a v3 directory or revert.
+- The README pitches Vectra on data, not prose: the first thing a
+  reader sees after the status line is the side-by-side speedup
+  table.
+- Lessons from a failed v2 round (`runs-typeflow-daemon-opt-v2/`)
+  are committed to the repo as a reminder that small prompt changes
+  are not free and that anchoring optimisations on n=7 anecdotes
+  invites regressions a wider bench would have caught.
+
 ## [0.6.0] – 2026-05-03
 
 This release is a large structural step: it adds the first end-to-end
@@ -176,5 +307,6 @@ plumbing in (single VERSION file, bundled LICENSE, CUDA CI gate).
 - This `CHANGELOG.md` introduced; future releases append a new
   `## [x.y.z] – YYYY-MM-DD` block above this one.
 
-[Unreleased]: https://github.com/HenryBuilds/Vectra/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/HenryBuilds/Vectra/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/HenryBuilds/Vectra/releases/tag/v0.7.0
 [0.6.0]: https://github.com/HenryBuilds/Vectra/releases/tag/v0.6.0
