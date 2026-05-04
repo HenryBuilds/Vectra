@@ -18,6 +18,7 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string_view>
 #include <system_error>
@@ -101,7 +102,14 @@ struct DaemonEndpoint {
     std::ifstream in(pid_path, std::ios::binary);
     if (!in)
         return std::nullopt;
-    std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    // Read the file via rdbuf() into a stringstream rather than the
+    // istreambuf_iterator-pair idiom: GCC 13's null-dereference
+    // analyzer flags the iterator constructor under -Werror because
+    // it cannot prove the streambuf is non-null. The rdbuf path is
+    // semantically equivalent and warning-clean.
+    std::ostringstream buf;
+    buf << in.rdbuf();
+    const std::string body = buf.str();
     nlohmann::json meta;
     try {
         meta = nlohmann::json::parse(body);

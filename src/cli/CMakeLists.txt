@@ -14,11 +14,18 @@ add_executable(vectra
 
 target_include_directories(vectra
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        # cpp-httplib is vendored as a single header at
-        # third_party/httplib.h; only `vectra serve` and the daemon
-        # client in `vectra ask` include it, so we keep the include
-        # private to this target.
+        ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Vendored single-header deps go in via SYSTEM so the project-level
+# strictness (-Werror -Wold-style-cast -Wsign-conversion -Wshadow,
+# all of which httplib.h trips somewhere) does NOT apply to their
+# code. Without SYSTEM, the GCC/Clang Linux builds fail at
+# httplib.h:367 on `(unsigned char)(char)c`. Our own code keeps its
+# warnings active because the regular -I above stays in front.
+target_include_directories(vectra
+    SYSTEM PRIVATE
+        # cpp-httplib (HTTP server + client for `vectra serve` and
+        # the daemon-client path in `vectra ask`).
         ${CMAKE_SOURCE_DIR}/third_party
         # nlohmann::json comes for free via llama.cpp's vendor tree;
         # we re-use it here for the daemon-client JSON parse instead
