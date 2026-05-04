@@ -14,11 +14,28 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdlib>
 #include <exception>
+#include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <process.h>
+#include <windows.h>
+#define VECTRA_GETPID() static_cast<long long>(GetCurrentProcessId())
+#else
+#include <unistd.h>
+#define VECTRA_GETPID() static_cast<long long>(getpid())
+#endif
 
 #include "vectra/core/chunk.hpp"
 #include "vectra/retrieve/retriever.hpp"
@@ -284,12 +301,64 @@ int run_serve(const ServeOptions& opts) {
         }
     });
 
+    // Write a PID file so `vectra ask` (and the VS Code extension)
+    // can auto-discover the daemon without the user passing
+    // --daemon-url every time. Best-effort: a crashed daemon leaves
+    // the file behind, so consumers must health-check the URL
+    // before trusting it. Cleaned up on graceful shutdown via the
+    // SIGINT handler below.
+    const fs::path daemon_meta_path = repo_root / ".vectra" / "daemon.json";
+    {
+        std::error_code ec;
+        fs::create_directories(daemon_meta_path.parent_path(), ec);
+        std::ofstream out(daemon_meta_path, std::ios::binary | std::ios::trunc);
+        if (out) {
+            out << fmt::format(
+                R"({{"port":{},"pid":{},"bind":"{}","model":"{}","reranker":"{}"}})",
+                resolved.port,
+                VECTRA_GETPID(),
+                json_escape(resolved.bind_host),
+                json_escape(resolved.model),
+                json_escape(resolved.reranker));
+        }
+    }
+    auto cleanup_pidfile = [&] {
+        std::error_code ec;
+        fs::remove(daemon_meta_path, ec);
+    };
+
+    // Catch Ctrl-C so the listen loop returns, server.listen()
+    // returns false-or-true cleanly, and we can remove the PID
+    // file before exiting. Without this the file would always be
+    // left stale even on an intended shutdown. We stash the server
+    // pointer in a static so the C-style signal handler can reach
+    // it; a single daemon per process is the only mode supported.
+    static httplib::Server* g_server_for_signal = nullptr;
+    g_server_for_signal = &server;
+    std::signal(SIGINT, [](int) {
+        if (g_server_for_signal != nullptr) {
+            g_server_for_signal->stop();
+        }
+    });
+#ifdef SIGTERM
+    std::signal(SIGTERM, [](int) {
+        if (g_server_for_signal != nullptr) {
+            g_server_for_signal->stop();
+        }
+    });
+#endif
+
+    fmt::print(stderr,
+               "             · pidfile:   {}\n",
+               daemon_meta_path.string());
     fmt::print(stderr,
                "             · listening on http://{}:{}/ (Ctrl-C to stop)\n",
                resolved.bind_host,
                resolved.port);
 
-    if (!server.listen(resolved.bind_host, static_cast<int>(resolved.port))) {
+    const bool ok = server.listen(resolved.bind_host, static_cast<int>(resolved.port));
+    cleanup_pidfile();
+    if (!ok) {
         fmt::print(stderr, "error: could not bind {}:{}\n", resolved.bind_host, resolved.port);
         return 1;
     }

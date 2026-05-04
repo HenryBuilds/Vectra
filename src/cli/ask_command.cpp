@@ -14,8 +14,10 @@
 #include <chrono>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <system_error>
@@ -81,6 +83,40 @@ struct DaemonEndpoint {
             fmt::format("--daemon-url must be a full http://host:port (got '{}')", url));
     }
     ep.base = std::move(s);
+    return ep;
+}
+
+// Look for a `.vectra/daemon.json` PID file in the workspace and,
+// if a daemon is reachable on the port it advertises, return its
+// endpoint. Returns an empty optional on any of:
+//   - file missing / unreadable / malformed
+//   - daemon's /health does not return 200 within ~1 s
+// The caller then falls back to in-process retrieval.
+[[nodiscard]] std::optional<DaemonEndpoint> try_discover_daemon(const fs::path& repo_root) {
+    const auto pid_path = repo_root / ".vectra" / "daemon.json";
+    std::error_code ec;
+    if (!fs::exists(pid_path, ec)) return std::nullopt;
+    std::ifstream in(pid_path, std::ios::binary);
+    if (!in) return std::nullopt;
+    std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    nlohmann::json meta;
+    try {
+        meta = nlohmann::json::parse(body);
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+    const int port = meta.value("port", 0);
+    const std::string bind = meta.value("bind", "127.0.0.1");
+    if (port <= 0) return std::nullopt;
+
+    DaemonEndpoint ep;
+    ep.base = fmt::format("http://{}:{}", bind, port);
+
+    httplib::Client cli(ep.base);
+    cli.set_connection_timeout(0, 500'000);  // 500 ms
+    cli.set_read_timeout(1, 0);              // 1 s
+    auto res = cli.Get("/health");
+    if (!res || res->status != 200) return std::nullopt;
     return ep;
 }
 
@@ -246,11 +282,21 @@ int run_ask(const AskOptions& opts) {
     // for the edit modes where they actually steer claude.
     comp.include_edit_invariants = (resolved.claude_permission_mode != "plan");
 
+    // Resolve the daemon endpoint:
+    //   1. explicit --daemon-url wins
+    //   2. otherwise try `<repo_root>/.vectra/daemon.json` and health-check
+    //   3. otherwise fall back to in-process retrieval
+    std::optional<DaemonEndpoint> daemon_ep;
     if (!resolved.daemon_url.empty()) {
-        const auto ep = parse_daemon_url(resolved.daemon_url);
-        fmt::print(stderr, "daemon:  {} (no in-process index/embedder)\n", ep.base);
+        daemon_ep = parse_daemon_url(resolved.daemon_url);
+    } else {
+        daemon_ep = try_discover_daemon(repo_root);
+    }
+
+    if (daemon_ep.has_value()) {
+        fmt::print(stderr, "daemon:  {} (no in-process index/embedder)\n", daemon_ep->base);
         std::int64_t took_ms = 0;
-        auto chunks = fetch_from_daemon(ep, task, resolved.k, took_ms);
+        auto chunks = fetch_from_daemon(*daemon_ep, task, resolved.k, took_ms);
         fmt::print(stderr,
                    "context: {} chunk{} retrieved [daemon {} ms]\n",
                    chunks.size(),
