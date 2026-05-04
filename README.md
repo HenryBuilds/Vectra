@@ -12,6 +12,90 @@ binary.
 > CLI. See [`CHANGELOG.md`](./CHANGELOG.md) for what's in the current
 > release and [`architecture.md`](./architecture.md) for the design.
 
+## Does it actually help?
+
+Two head-to-head benchmarks against `claude -p` running alone in the
+same repo. Both pipelines answer the same research questions; the only
+difference is whether Vectra pre-fetches the relevant chunks or Claude
+discovers them itself via `Glob` / `Grep` / `Read`. Same Claude model,
+same temperature, same `--permission-mode plan`. Full data and harness
+in [`benchmarks/proof-of-concept/`](./benchmarks/proof-of-concept/).
+
+| Repo | Size | Vectra Σ time | Claude alone Σ time | Aggregate speedup | Best single task |
+|---|---|---:|---:|---:|---:|
+| **typeflow** (private TS / Next.js workflow tool) | 70k LOC, ~1k files | **285 s** | 331 s | **1.16×** | 3.55× (sandbox) |
+| **[kubernetes/kubernetes](https://github.com/kubernetes/kubernetes)** | **5M LOC, ~17k files** | **1149 s** | 1400 s | **1.22×** | **4.31×** (scheduler-priority) |
+
+Cost is roughly flat on both: −5 % on kubernetes, +6 % on typeflow.
+Quality is a wash — Vectra and Claude alone hit the same verifier
+anchors on every passing task. **The wall-clock saving comes from
+Vectra eliminating the grep-spelunking phase Claude does when it has
+to discover the repo from scratch.**
+
+### Per-task — kubernetes (5M LOC)
+
+```mermaid
+xychart-beta
+    title "Vectra speedup vs Claude alone — kubernetes (5M LOC, n=10)"
+    x-axis ["sched-pri", "kublt-evct", "adm-flow", "leader", "watch", "iptables", "pdb-evct", "qos", "pprof", "sched-q"]
+    y-axis "speedup × (1.0 = tied)" 0 --> 5
+    bar [4.31, 1.07, 0.73, 1.10, 0.94, 0.89, 2.05, 1.23, 1.84, 0.66]
+    line [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+```
+
+Bars above 1.0 = Vectra wins. **Vectra wins 6 / 10 tasks**, with
+three runaway wins (`scheduler-priority` 4.3×, `pdb-eviction` 2.0×,
+`pprof-routes` 1.8×). Claude alone wins 4 (`admission-flow`,
+`apiserver-watch-cache`, `iptables-proxier-sync`, `scheduler-queue`),
+all by less than 35 %. Vectra's wins are bigger than its losses —
+which is why the aggregate speedup is positive even though the per-task
+record is mixed.
+
+### Per-task — typeflow (70k LOC)
+
+```mermaid
+xychart-beta
+    title "Vectra speedup vs Claude alone — typeflow (70k LOC, n=7, daemon + opts)"
+    x-axis ["encrypt", "sandbox", "wf-queue", "exec-reg", "ai-flow", "trpc-auth", "cred-decrypt"]
+    y-axis "speedup × (1.0 = tied)" 0 --> 4
+    bar [1.33, 3.55, 0.82, 1.84, 1.02, 0.66, 0.81]
+    line [1, 1, 1, 1, 1, 1, 1]
+```
+
+Vectra wins 3 / 7 (sandbox 3.5×, executor-registry 1.8×, encryption 1.3×),
+ties 1, loses 3. The losses are on queries with very specific keyword
+matches where Claude's own `Grep` is direct-hit (`tf-trpc-auth`,
+`tf-credential-decrypt`).
+
+### Why the gap widens on bigger codebases
+
+The single biggest Vectra win is `scheduler-priority` on kubernetes —
+**4.3×** faster wall-clock. That task asks "where is a Pod's priority
+used to decide which existing pods to preempt when there is no room?".
+Claude alone has to search through 17 000 Go files: `Glob` for
+priority-related filenames, `Grep` for `Preempt`, `Read` likely
+candidates, repeat. Vectra's symbol-search lands on
+`pkg/scheduler/framework/plugins/defaultpreemption/default_preemption.go`
+in a single FTS5 query (39 ms) and Claude's first turn is the answer.
+
+Both benchmarks show Vectra's median speedup grows with codebase size.
+The 70k-LOC repo gives 1.16× aggregate; the 5M-LOC repo gives 1.22×
+**with the weakest Vectra config (symbol-only, no embedder, no
+daemon)**. The hand-off cost is a constant — the savings scale with
+how many `Grep` rounds Claude would otherwise do.
+
+The harness, raw NDJSON streams, extracted answers, per-task `meta.json`
+(input/output tokens, cost, duration), and the side-by-side render
+script all live in [`benchmarks/proof-of-concept/`](./benchmarks/proof-of-concept/).
+Reproducing on your own repo is `vectra index . && KUBE_DIR=$(pwd)
+RUNS_DIR_OVERRIDE=… ./run-poc.sh` plus a `tasks-yourrepo.json`.
+
+> **Caveats up front.** Both benches are small (n = 7 and n = 10), one
+> repo each, both research-style questions in plan mode. Edit-task data
+> is mixed (Vectra was +38% slower / +65% pricier than Claude alone on
+> 5 kubernetes edit-tasks where the file path was already in the prompt).
+> Treat the headline numbers as directional, not contractual.
+
 ## Why Vectra
 
 Existing code assistants either ship your code to a remote API or run a
