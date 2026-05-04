@@ -235,7 +235,8 @@ int main(int argc, char** argv) {
         app.add_subcommand("serve", "Run the local retrieval daemon (warm embedder, fast queries)");
 
     vectra::cli::ServeOptions serve_opts;
-    serve_cmd->add_option("--root", serve_opts.repo_root, "Project root (default: walk up from CWD)")
+    serve_cmd
+        ->add_option("--root", serve_opts.repo_root, "Project root (default: walk up from CWD)")
         ->check(CLI::ExistingDirectory);
     serve_cmd->add_option("--db", serve_opts.db, "Index DB (default: <root>/.vectra/index.db)");
     serve_cmd->add_option(

@@ -8,7 +8,6 @@
 // only included when --daemon-url is set, so the include cost shows
 // up here but the runtime cost is gated on the flag.
 #include <httplib.h>
-#include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -17,6 +16,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
@@ -77,7 +77,8 @@ struct DaemonEndpoint {
 [[nodiscard]] DaemonEndpoint parse_daemon_url(std::string_view url) {
     DaemonEndpoint ep;
     std::string s{url};
-    while (!s.empty() && s.back() == '/') s.pop_back();
+    while (!s.empty() && s.back() == '/')
+        s.pop_back();
     if (s.empty() || (s.find("http://") != 0 && s.find("https://") != 0)) {
         throw std::runtime_error(
             fmt::format("--daemon-url must be a full http://host:port (got '{}')", url));
@@ -95,9 +96,11 @@ struct DaemonEndpoint {
 [[nodiscard]] std::optional<DaemonEndpoint> try_discover_daemon(const fs::path& repo_root) {
     const auto pid_path = repo_root / ".vectra" / "daemon.json";
     std::error_code ec;
-    if (!fs::exists(pid_path, ec)) return std::nullopt;
+    if (!fs::exists(pid_path, ec))
+        return std::nullopt;
     std::ifstream in(pid_path, std::ios::binary);
-    if (!in) return std::nullopt;
+    if (!in)
+        return std::nullopt;
     std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     nlohmann::json meta;
     try {
@@ -107,7 +110,8 @@ struct DaemonEndpoint {
     }
     const int port = meta.value("port", 0);
     const std::string bind = meta.value("bind", "127.0.0.1");
-    if (port <= 0) return std::nullopt;
+    if (port <= 0)
+        return std::nullopt;
 
     DaemonEndpoint ep;
     ep.base = fmt::format("http://{}:{}", bind, port);
@@ -116,7 +120,8 @@ struct DaemonEndpoint {
     cli.set_connection_timeout(0, 500'000);  // 500 ms
     cli.set_read_timeout(1, 0);              // 1 s
     auto res = cli.Get("/health");
-    if (!res || res->status != 200) return std::nullopt;
+    if (!res || res->status != 200)
+        return std::nullopt;
     return ep;
 }
 
@@ -133,7 +138,8 @@ struct DaemonEndpoint {
 
     nlohmann::json req;
     req["task"] = task;
-    if (k > 0) req["k"] = k;
+    if (k > 0)
+        req["k"] = k;
 
     auto res = cli.Post("/retrieve", req.dump(), "application/json");
     if (!res) {
@@ -143,16 +149,14 @@ struct DaemonEndpoint {
                         httplib::to_string(res.error())));
     }
     if (res->status != 200) {
-        throw std::runtime_error(
-            fmt::format("daemon returned {}: {}", res->status, res->body));
+        throw std::runtime_error(fmt::format("daemon returned {}: {}", res->status, res->body));
     }
 
     nlohmann::json body;
     try {
         body = nlohmann::json::parse(res->body);
     } catch (const std::exception& e) {
-        throw std::runtime_error(
-            fmt::format("daemon response was not valid JSON: {}", e.what()));
+        throw std::runtime_error(fmt::format("daemon response was not valid JSON: {}", e.what()));
     }
 
     if (!body.contains("chunks") || !body["chunks"].is_array()) {
@@ -328,88 +332,89 @@ int run_ask(const AskOptions& opts) {
         retrieve::Retriever retriever(store);
 
 #if VECTRA_HAS_EMBED
-    std::unique_ptr<embed::Embedder> embedder;
-    if (!resolved.model.empty()) {
-        const auto* entry = embed::ModelRegistry::by_name(resolved.model);
-        if (entry == nullptr) {
-            fmt::print(
-                stderr, "error: unknown model '{}'. Try `vectra model list`.\n", resolved.model);
-            return 2;
+        std::unique_ptr<embed::Embedder> embedder;
+        if (!resolved.model.empty()) {
+            const auto* entry = embed::ModelRegistry::by_name(resolved.model);
+            if (entry == nullptr) {
+                fmt::print(stderr,
+                           "error: unknown model '{}'. Try `vectra model list`.\n",
+                           resolved.model);
+                return 2;
+            }
+            const auto model_path = embed::ModelRegistry::local_path(*entry);
+            if (!fs::exists(model_path)) {
+                fmt::print(stderr,
+                           "error: model not cached. Run `vectra model pull {}` first.\n",
+                           resolved.model);
+                return 2;
+            }
+            embed::EmbedderConfig cfg;
+            cfg.model_path = model_path;
+            cfg.model_id = entry->name;
+            embedder = std::make_unique<embed::Embedder>(embed::Embedder::open(cfg));
+            retriever.set_embedder(embedder.get());
+            fmt::print(stderr, "model:   {} (dim {})\n", entry->name, embedder->dim());
+        } else {
+            fmt::print(stderr, "model:   (none — symbol-only retrieval)\n");
         }
-        const auto model_path = embed::ModelRegistry::local_path(*entry);
-        if (!fs::exists(model_path)) {
-            fmt::print(stderr,
-                       "error: model not cached. Run `vectra model pull {}` first.\n",
-                       resolved.model);
-            return 2;
-        }
-        embed::EmbedderConfig cfg;
-        cfg.model_path = model_path;
-        cfg.model_id = entry->name;
-        embedder = std::make_unique<embed::Embedder>(embed::Embedder::open(cfg));
-        retriever.set_embedder(embedder.get());
-        fmt::print(stderr, "model:   {} (dim {})\n", entry->name, embedder->dim());
-    } else {
-        fmt::print(stderr, "model:   (none — symbol-only retrieval)\n");
-    }
 
-    std::unique_ptr<embed::Reranker> reranker;
-    if (!resolved.reranker.empty()) {
-        const auto* entry = embed::ModelRegistry::by_name(resolved.reranker);
-        if (entry == nullptr) {
-            fmt::print(stderr,
-                       "error: unknown reranker '{}'. Try `vectra model list`.\n",
-                       resolved.reranker);
-            return 2;
+        std::unique_ptr<embed::Reranker> reranker;
+        if (!resolved.reranker.empty()) {
+            const auto* entry = embed::ModelRegistry::by_name(resolved.reranker);
+            if (entry == nullptr) {
+                fmt::print(stderr,
+                           "error: unknown reranker '{}'. Try `vectra model list`.\n",
+                           resolved.reranker);
+                return 2;
+            }
+            const auto model_path = embed::ModelRegistry::local_path(*entry);
+            if (!fs::exists(model_path)) {
+                fmt::print(stderr,
+                           "error: reranker not cached. Run `vectra model pull {}` first.\n",
+                           resolved.reranker);
+                return 2;
+            }
+            embed::RerankerConfig cfg;
+            cfg.model_path = model_path;
+            cfg.model_id = entry->name;
+            reranker = std::make_unique<embed::Reranker>(embed::Reranker::open(cfg));
+            retriever.set_reranker(reranker.get());
+            fmt::print(stderr, "reranker:{}\n", entry->name);
         }
-        const auto model_path = embed::ModelRegistry::local_path(*entry);
-        if (!fs::exists(model_path)) {
-            fmt::print(stderr,
-                       "error: reranker not cached. Run `vectra model pull {}` first.\n",
-                       resolved.reranker);
-            return 2;
-        }
-        embed::RerankerConfig cfg;
-        cfg.model_path = model_path;
-        cfg.model_id = entry->name;
-        reranker = std::make_unique<embed::Reranker>(embed::Reranker::open(cfg));
-        retriever.set_reranker(reranker.get());
-        fmt::print(stderr, "reranker:{}\n", entry->name);
-    }
 #else
-    if (!resolved.model.empty() || !resolved.reranker.empty()) {
-        fmt::print(stderr,
-                   "error: this build was produced with VECTRA_BUILD_EMBED=OFF; "
-                   "the --model and --reranker flags are unavailable.\n");
-        return 2;
-    }
-    fmt::print(stderr, "model:   (build without embed support — symbol-only)\n");
+        if (!resolved.model.empty() || !resolved.reranker.empty()) {
+            fmt::print(stderr,
+                       "error: this build was produced with VECTRA_BUILD_EMBED=OFF; "
+                       "the --model and --reranker flags are unavailable.\n");
+            return 2;
+        }
+        fmt::print(stderr, "model:   (build without embed support — symbol-only)\n");
 #endif
 
-    // ---- retrieve ----------------------------------------------------
-    retrieve::RetrieveOptions r_opts;
-    r_opts.k = resolved.k;
-    // Trim the chunk count when the score gradient is steep
-    // (rank-0 dominates → 1-2 chunks usually). On slam-dunk
-    // queries this cuts claude's input tokens dramatically;
-    // on broad queries the gradient is gentle and we still
-    // return the full opts.k.
-    r_opts.adaptive_k = true;
-    if (!resolved.quiet) {
-        // Per-stage timing surfaces where wall-clock time goes
-        // (model load happens before this, but everything inside
-        // the retriever is covered).
-        r_opts.on_stage =
-            [](std::string_view name, std::size_t count, std::chrono::milliseconds dur) {
-                fmt::print(stderr,
-                           "  [{:>5} ms] {:<25} ({} {})\n",
-                           dur.count(),
-                           name,
-                           count,
-                           count == 1 ? "item" : "items");
-            };
-        fmt::print(stderr, "retrieval pipeline:\n");
-    }
+        // ---- retrieve ----------------------------------------------------
+        retrieve::RetrieveOptions r_opts;
+        r_opts.k = resolved.k;
+        // Trim the chunk count when the score gradient is steep
+        // (rank-0 dominates → 1-2 chunks usually). On slam-dunk
+        // queries this cuts claude's input tokens dramatically;
+        // on broad queries the gradient is gentle and we still
+        // return the full opts.k.
+        r_opts.adaptive_k = true;
+        if (!resolved.quiet) {
+            // Per-stage timing surfaces where wall-clock time goes
+            // (model load happens before this, but everything inside
+            // the retriever is covered).
+            r_opts.on_stage =
+                [](std::string_view name, std::size_t count, std::chrono::milliseconds dur) {
+                    fmt::print(stderr,
+                               "  [{:>5} ms] {:<25} ({} {})\n",
+                               dur.count(),
+                               name,
+                               count,
+                               count == 1 ? "item" : "items");
+                };
+            fmt::print(stderr, "retrieval pipeline:\n");
+        }
         const auto retrieve_start = std::chrono::steady_clock::now();
         const auto hits = retriever.retrieve(task, r_opts);
         const auto retrieve_total = std::chrono::duration_cast<std::chrono::milliseconds>(

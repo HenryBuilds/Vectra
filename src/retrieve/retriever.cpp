@@ -163,7 +163,8 @@ std::vector<Hit> Retriever::retrieve(std::string_view query, const RetrieveOptio
         if (opts.adaptive_k && !dominant_symbol_hash.empty() && ranked.size() >= 2) {
             std::size_t i = 1;
             for (; i < std::min(opts.k, ranked.size()); ++i) {
-                if (ranked[i - 1].second <= 0.0) break;  // can't compute ratio
+                if (ranked[i - 1].second <= 0.0)
+                    break;  // can't compute ratio
                 const double ratio = ranked[i].second / ranked[i - 1].second;
                 if (ratio < opts.adaptive_cliff_ratio) {
                     break;  // cliff: drop everything from i onward

@@ -7,9 +7,8 @@
 // "header-only" mode (default) so no separate library has to be
 // linked. The Windows socket warnings that leak through `/WX` are
 // silenced via the same wd-list the rest of the binary uses.
-#include <httplib.h>
-
 #include <fmt/format.h>
+#include <httplib.h>
 
 #include <atomic>
 #include <chrono>
@@ -64,23 +63,38 @@ namespace fs = std::filesystem;
 bool parse_retrieve_request(const std::string& body, std::string& task_out, std::size_t& k_out) {
     // Find "task" key.
     const auto task_key = body.find("\"task\"");
-    if (task_key == std::string::npos) return false;
+    if (task_key == std::string::npos)
+        return false;
     auto colon = body.find(':', task_key);
-    if (colon == std::string::npos) return false;
+    if (colon == std::string::npos)
+        return false;
     auto quote = body.find('"', colon);
-    if (quote == std::string::npos) return false;
+    if (quote == std::string::npos)
+        return false;
     std::string s;
     bool escape = false;
     for (std::size_t i = quote + 1; i < body.size(); ++i) {
         const char c = body[i];
         if (escape) {
             switch (c) {
-                case 'n': s += '\n'; break;
-                case 't': s += '\t'; break;
-                case 'r': s += '\r'; break;
-                case '"': s += '"'; break;
-                case '\\': s += '\\'; break;
-                default: s += c; break;
+                case 'n':
+                    s += '\n';
+                    break;
+                case 't':
+                    s += '\t';
+                    break;
+                case 'r':
+                    s += '\r';
+                    break;
+                case '"':
+                    s += '"';
+                    break;
+                case '\\':
+                    s += '\\';
+                    break;
+                default:
+                    s += c;
+                    break;
             }
             escape = false;
             continue;
@@ -97,7 +111,8 @@ bool parse_retrieve_request(const std::string& body, std::string& task_out, std:
                 auto k_colon = body.find(':', k_key);
                 if (k_colon != std::string::npos) {
                     std::size_t pos = k_colon + 1;
-                    while (pos < body.size() && (body[pos] == ' ' || body[pos] == '\t')) ++pos;
+                    while (pos < body.size() && (body[pos] == ' ' || body[pos] == '\t'))
+                        ++pos;
                     std::size_t v = 0;
                     bool any = false;
                     while (pos < body.size() && body[pos] >= '0' && body[pos] <= '9') {
@@ -105,7 +120,8 @@ bool parse_retrieve_request(const std::string& body, std::string& task_out, std:
                         ++pos;
                         any = true;
                     }
-                    if (any) k_out = v;
+                    if (any)
+                        k_out = v;
                 }
             }
             return true;
@@ -119,7 +135,8 @@ std::string serialize_chunks(const std::vector<retrieve::Hit>& hits, std::int64_
     std::string out;
     out += R"({"chunks":[)";
     for (std::size_t i = 0; i < hits.size(); ++i) {
-        if (i > 0) out += ',';
+        if (i > 0)
+            out += ',';
         const auto& h = hits[i];
         out += fmt::format(
             R"({{"file":"{}","start_line":{},"end_line":{},"symbol":"{}","kind":"{}","text":"{}","score":{:.4f}}})",
@@ -163,8 +180,10 @@ int run_serve(const ServeOptions& opts) {
         return 1;
     }
     ServeOptions resolved = opts;
-    if (resolved.model.empty()) resolved.model = project_cfg.model;
-    if (resolved.reranker.empty()) resolved.reranker = project_cfg.reranker;
+    if (resolved.model.empty())
+        resolved.model = project_cfg.model;
+    if (resolved.reranker.empty())
+        resolved.reranker = project_cfg.reranker;
     if (resolved.default_k == 0) {
         resolved.default_k = project_cfg.top_k != 0 ? project_cfg.top_k : std::size_t{8};
     }
@@ -273,7 +292,8 @@ int run_serve(const ServeOptions& opts) {
             res.set_content(R"({"error":"task is empty"})", "application/json");
             return;
         }
-        if (k == 0) k = resolved.default_k;
+        if (k == 0)
+            k = resolved.default_k;
 
         try {
             retrieve::RetrieveOptions r_opts;
@@ -313,13 +333,12 @@ int run_serve(const ServeOptions& opts) {
         fs::create_directories(daemon_meta_path.parent_path(), ec);
         std::ofstream out(daemon_meta_path, std::ios::binary | std::ios::trunc);
         if (out) {
-            out << fmt::format(
-                R"({{"port":{},"pid":{},"bind":"{}","model":"{}","reranker":"{}"}})",
-                resolved.port,
-                VECTRA_GETPID(),
-                json_escape(resolved.bind_host),
-                json_escape(resolved.model),
-                json_escape(resolved.reranker));
+            out << fmt::format(R"({{"port":{},"pid":{},"bind":"{}","model":"{}","reranker":"{}"}})",
+                               resolved.port,
+                               VECTRA_GETPID(),
+                               json_escape(resolved.bind_host),
+                               json_escape(resolved.model),
+                               json_escape(resolved.reranker));
         }
     }
     auto cleanup_pidfile = [&] {
@@ -348,9 +367,7 @@ int run_serve(const ServeOptions& opts) {
     });
 #endif
 
-    fmt::print(stderr,
-               "             · pidfile:   {}\n",
-               daemon_meta_path.string());
+    fmt::print(stderr, "             · pidfile:   {}\n", daemon_meta_path.string());
     fmt::print(stderr,
                "             · listening on http://{}:{}/ (Ctrl-C to stop)\n",
                resolved.bind_host,

@@ -35,14 +35,14 @@
 namespace vectra::cli {
 
 struct ServeOptions {
-    std::filesystem::path repo_root;       // empty → walk up from CWD
-    std::filesystem::path db;              // empty → <root>/.vectra/index.db
-    std::string model;                     // embedding model (empty = symbol-only)
-    std::string reranker;                  // optional cross-encoder
-    std::string bind_host{"127.0.0.1"};    // localhost-only by default
+    std::filesystem::path repo_root;     // empty → walk up from CWD
+    std::filesystem::path db;            // empty → <root>/.vectra/index.db
+    std::string model;                   // embedding model (empty = symbol-only)
+    std::string reranker;                // optional cross-encoder
+    std::string bind_host{"127.0.0.1"};  // localhost-only by default
     std::uint16_t port{7777};
     std::size_t default_k{8};
-    bool quiet{false};                     // suppress per-request log
+    bool quiet{false};  // suppress per-request log
 };
 
 // Run the daemon until killed. Returns 0 on clean shutdown, non-
