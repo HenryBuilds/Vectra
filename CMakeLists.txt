@@ -128,6 +128,17 @@ endif()
 # ---------------------------------------------------------------------------
 # Dependencies (vcpkg)
 # ---------------------------------------------------------------------------
+# Some vcpkg sqlite3 port versions ship a vcpkg-cmake-wrapper.cmake
+# that internally calls `_find_package(SQLite3 CONFIG)` and assumes
+# upstream installs a real SQLite3Config.cmake — which the same port
+# does NOT include, so configure fails on those runners with
+# "Could not find a package configuration file provided by SQLite3".
+# We carry a stub Config under cmake/sqlite3-shim/ that delegates to
+# the unofficial-sqlite3 target the port actually ships. Insert that
+# directory at the head of CMAKE_PREFIX_PATH so the wrapper's CONFIG
+# lookup hits our stub before anything else.
+list(PREPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/sqlite3-shim")
+
 # SQLite3 in vcpkg ships only the "unofficial-sqlite3" config, not a
 # standard SQLite3Config.cmake. The exported target is
 # unofficial::sqlite3::sqlite3 — used by vectra-store once it lands.

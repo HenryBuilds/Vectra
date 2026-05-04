@@ -15,6 +15,7 @@ Makefile
 !CMakeLists.txt
 !CMakePresets.json
 !cmake/*.cmake
+!cmake/**/*.cmake
 CTestTestfile.cmake
 _deps/
 
